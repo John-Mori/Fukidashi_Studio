@@ -13,6 +13,12 @@ import { getSelectedType, useProjectStore } from "../store/projectStore";
 import "../styles/global.css";
 
 const SUPPORTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const IMAGE_TYPE_BY_EXTENSION: Record<string, string> = {
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+};
 
 function projectDownloadUrl(project: ProjectDocument): string {
   const json = JSON.stringify(project, null, 2);
@@ -21,6 +27,20 @@ function projectDownloadUrl(project: ProjectDocument): string {
 
 function fileStem(name: string): string {
   return name.replace(/\.[^.]+$/, "");
+}
+
+function detectSupportedImageType(file: File): string | null {
+  const mimeType = file.type.toLowerCase();
+  if (SUPPORTED_IMAGE_TYPES.has(mimeType)) return mimeType;
+  const extension = file.name.toLowerCase().match(/\.[^.]+$/)?.[0];
+  return extension ? IMAGE_TYPE_BY_EXTENSION[extension] ?? null : null;
+}
+
+function imageFileName(file: File): string {
+  if (file.name) return file.name;
+  const mimeType = detectSupportedImageType(file) ?? "image/png";
+  const extension = mimeType === "image/jpeg" ? "jpg" : mimeType.replace("image/", "");
+  return `clipboard-image-${Date.now()}.${extension}`;
 }
 
 export function App() {
@@ -105,24 +125,26 @@ export function App() {
   }, [setProject, setSelectedIds]);
 
   const loadBaseImageFile = useCallback(async (file: File) => {
-    if (!SUPPORTED_IMAGE_TYPES.has(file.type)) {
+    const mimeType = detectSupportedImageType(file);
+    if (!mimeType) {
       pushToast("この画像形式は読み込めません。PNG / JPEG / WebP を使ってください。", "error");
       return;
     }
     try {
-      const dataUrl = await readFileAsDataUrl(file);
+      const normalizedFile = file.type === mimeType ? file : new File([file], imageFileName(file), { type: mimeType, lastModified: file.lastModified });
+      const dataUrl = await readFileAsDataUrl(normalizedFile);
       const size = await loadImageSize(dataUrl);
       const baseImage: BaseImageAsset = {
         id: createId("base"),
-        name: file.name,
-        mimeType: file.type,
+        name: normalizedFile.name,
+        mimeType,
         width: size.width,
         height: size.height,
         dataUrl,
         createdAt: nowIso(),
       };
       const next = createEmptyProject(size);
-      next.name = fileStem(file.name);
+      next.name = fileStem(normalizedFile.name);
       next.canvas.backgroundAssetId = baseImage.id;
       next.assets = { baseImage, templates: project.assets.templates };
       next.settings.layout.previewPosition = project.settings.layout.previewPosition;
@@ -139,6 +161,27 @@ export function App() {
     await loadBaseImageFile(file);
     if (imageInputRef.current) imageInputRef.current.value = "";
   };
+
+  const handlePasteImage = useCallback(async (event: ClipboardEvent) => {
+    const items = event.clipboardData?.items;
+    if (!items || items.length === 0) return;
+
+    const file = Array.from(items).reduce<File | null>((match, item) => {
+      if (match || item.kind !== "file") return match;
+      const candidate = item.getAsFile();
+      return candidate && detectSupportedImageType(candidate) ? candidate : null;
+    }, null);
+    if (!file) return;
+
+    event.preventDefault();
+    const pastedFile = file.name ? file : new File([file], imageFileName(file), { type: detectSupportedImageType(file) ?? "image/png", lastModified: file.lastModified });
+    await loadBaseImageFile(pastedFile);
+  }, [loadBaseImageFile]);
+
+  useEffect(() => {
+    window.addEventListener("paste", handlePasteImage);
+    return () => window.removeEventListener("paste", handlePasteImage);
+  }, [handlePasteImage]);
 
   const handleTemplateInput = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -379,8 +422,8 @@ export function App() {
         <section className="preview-panel">
           {!project.assets.baseImage && (
             <div className="empty-canvas-state">
-              <strong>画像をここへドロップ</strong>
-              <span>PNG / JPEG / WebP</span>
+              <strong>画像をここへドロップ / 貼り付け</strong>
+              <span>PNG / JPEG / WebP / Ctrl+V</span>
               <button onClick={() => imageInputRef.current?.click()}>画像を開く</button>
               {autosaveAvailable && <button className="secondary" onClick={() => void handleRestoreAutosave()}>自動保存を復旧</button>}
             </div>
@@ -409,6 +452,3 @@ export function App() {
     </div>
   );
 }
-
-
-
