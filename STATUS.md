@@ -12,24 +12,28 @@
 - [x] CP6: 自動保存、復旧、プロジェクトJSON保存/読込
 - [x] CP7: 書き出し、ファイル名、品質設定
 - [x] CP8: UI/UX仕上げ、ショートカット、レスポンシブ基盤
+- [x] CP9: 自動テスト、Python検証ツール、Windows Tauriビルド
 - [x] CP10: 手順書、最終レポート
 - [x] 一括検証 `docs/CHECK_REPORT.json` 生成
 - [x] Rust/rustup/Cargo 導入と確認
-- [x] Tauri build試行、`link.exe` 未検出まで原因確認
+- [x] Visual Studio Build Tools 2022 + C++ workload 導入と確認
+- [x] Tauri build成功、MSI/NSISインストーラ生成
+- [x] ビルド済みexeの短時間起動確認
 
 ## 進行中
-- [ ] CP9: Windows Tauriビルド（Visual Studio C++ Build Tools のUAC承認待ち）
+- なし
 
 ## 未着手
-- [ ] Visual Studio Build Tools 2022 + C++ workload の導入完了
-- [ ] Tauri実機起動 `pnpm tauri dev`
-- [ ] Windowsインストーラ生成 `pnpm tauri build`
+- なし
 
 ## 次の一手
-- Visual Studio Build ToolsのUACプロンプトを承認してC++ workloadを導入する。
-- 導入後、`pnpm tauri info` でMSVC検出を確認する。
-- その後 `pnpm tauri dev`、`pnpm tauri build` を実行する。
-- Web確認は `pnpm run dev -- --port 5173` で `http://127.0.0.1:5173` を開く。
+- 実画像と実吹き出しテンプレで手動検収する。
+- 必要ならUI微調整、テンプレ管理の永続化強化、コード分割を次フェーズで行う。
+
+## 成果物
+- `src-tauri/target/release/fukidashi-studio.exe`
+- `src-tauri/target/release/bundle/msi/Fukidashi Studio_0.1.0_x64_en-US.msi`
+- `src-tauri/target/release/bundle/nsis/Fukidashi Studio_0.1.0_x64-setup.exe`
 
 ## 決定事項ログ
 - 2026-07-09: MVPは設計書どおり Tauri 2 + React + TypeScript + Vite + Fabric.js を基本構成にする。
@@ -39,8 +43,9 @@
 - 2026-07-09: PythonはGUI本体ではなく、画像検査、fixture生成、差分検証、レポート生成の補助CLIとして使う。
 - 2026-07-09: ローカル確認結果は Node.js v24.14.1、pnpm 11.7.0、Python 3.12.10。WebView2は検出済み。
 - 2026-07-09: Rustup 1.29.0、rustc/cargo 1.96.1 をwingetで導入済み。
-- 2026-07-09: Visual Studio Build Tools導入は1602で中断。ログに `User may have declined UAC prompt` と記録。
-- 2026-07-09: `pnpm tauri build` はフロントエンドビルドとcrate取得後、`link.exe not found` で停止。
+- 2026-07-09: Visual Studio Build Tools 2022 + C++ workload を導入し、MSVC/link.exeを確認済み。
+- 2026-07-09: `src-tauri/tauri.conf.json` はBOMなしUTF-8に統一し、Windows用 `icons/icon.ico` を明示する。
 - 2026-07-09: pnpm 11 のビルドスクリプト許可は `pnpm-workspace.yaml` の `allowBuilds` で管理する。
 - 2026-07-09: SVGテンプレはMVP対象外。PNG/JPEG/WebPのみ対応する。
 - 2026-07-09: `pnpm run build`、`pnpm run test`、`pnpm run python:test`、`pnpm run python:smoke` は成功。
+- 2026-07-09: `pnpm tauri build` は成功。MSI/NSISインストーラを生成済み。

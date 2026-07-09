@@ -20,6 +20,7 @@
 - 元画像ピクセル寸法でのPNG/JPEG/WebP書き出し経路
 - Python画像検査CLI
 - Tauri 2骨格、dialog/fsプラグイン設定、CSP設定
+- Windows向けTauriビルド、MSI/NSISインストーラ生成
 
 ## 検証済み
 
@@ -27,25 +28,22 @@
 - `pnpm run test`: 5 tests 成功
 - `pnpm run python:test`: 2 tests 成功
 - `pnpm run python:smoke`: 成功
-- `pnpm tauri info`: 実行済み
+- `python scripts/test_all.py`: 成功
+- `pnpm tauri info`: 全環境チェック成功
+- `pnpm tauri build`: 成功
+- `src-tauri/target/release/fukidashi-studio.exe`: 短時間起動確認成功
 
-## Tauriビルドの残ブロッカー
+## 成果物
 
-Rust/rustup/Cargo はwingetで導入済みです。現在の残ブロッカーは Visual Studio Build Tools with Visual C++ workload のみです。
-
-pnpm tauri build はフロントエンドビルドとRust crates取得後、以下で停止しました。
-
-`	ext
-error: linker `link.exe` not found
-` 
-
-Build Tools導入はwingetと直接管理者起動の両方を試しましたが、UACキャンセル相当の1602で中断されました。詳細は docs/TAURI_BUILD_ATTEMPT.md を参照してください。
+- `src-tauri/target/release/fukidashi-studio.exe`
+- `src-tauri/target/release/bundle/msi/Fukidashi Studio_0.1.0_x64_en-US.msi`
+- `src-tauri/target/release/bundle/nsis/Fukidashi Studio_0.1.0_x64-setup.exe`
+- `docs/CHECK_REPORT.json`
+- `docs/USER_GUIDE.md`
 
 ## 既知の注意
 
-- MVPはブラウザ互換ファイルサービスで操作確認できる構成です。
-- Tauriデスクトップ版の実機起動はRust/C++ Build Tools導入後に実施します。
+- MVPはブラウザ互換ファイルサービスで操作確認できる構成です。Tauri版でもUI本体は同じReact/Fabric経路を使います。
 - SVGテンプレはMVP対象外です。PNG/JPEG/WebPのみを扱います。
 - Fabric.jsを含むため、本番ビルドJSは500KB警告が出ます。MVPでは許容し、必要なら後続でコード分割します。
-
-
+- 実画像と実吹き出しテンプレでの最終目視検収は次フェーズで行ってください。

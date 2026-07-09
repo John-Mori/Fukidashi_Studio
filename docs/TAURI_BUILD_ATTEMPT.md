@@ -1,4 +1,4 @@
-﻿# Tauri Build Attempt
+﻿# Tauri Build Report
 
 Date: 2026-07-09
 
@@ -10,58 +10,34 @@ Date: 2026-07-09
   - rustc 1.96.1
   - cargo 1.96.1
   - stable-x86_64-pc-windows-msvc
-- Ran `pnpm tauri info` after Rust install.
-- Ran `pnpm tauri build`.
+- Installed Visual Studio Build Tools 2022 with C++ workload.
+- Confirmed `pnpm tauri info` reports all environment checks as OK:
+  - WebView2
+  - MSVC
+  - rustc
+  - cargo
+  - rustup
+- Generated a minimal Windows `.ico` app icon at `src-tauri/icons/icon.ico`.
+- Fixed `src-tauri/tauri.conf.json` to UTF-8 without BOM and configured bundle icon.
+- Ran `pnpm tauri build` successfully.
+- Launched `src-tauri/target/release/fukidashi-studio.exe` briefly and confirmed it stayed running before graceful close.
 
-## Result
+## Build Outputs
 
-`pnpm tauri build` successfully completed the frontend build and downloaded Rust crates, then stopped at Rust compilation because the MSVC linker was unavailable.
+- `src-tauri/target/release/fukidashi-studio.exe`
+- `src-tauri/target/release/bundle/msi/Fukidashi Studio_0.1.0_x64_en-US.msi`
+- `src-tauri/target/release/bundle/nsis/Fukidashi Studio_0.1.0_x64-setup.exe`
 
-Representative error:
+## Notes
 
-```text
-error: linker `link.exe` not found
-note: the msvc targets depend on the msvc linker but `link.exe` was not found
-note: please ensure that Visual Studio 2017 or later, or Build Tools for Visual Studio were installed with the Visual C++ option
-```
+- The first Tauri build failed at `link.exe not found`, which was resolved by installing Visual Studio Build Tools C++ workload.
+- The next failure was `tauri.conf.json` JSON parse at line 1 column 1, caused by BOM. Rewriting as BOM-less UTF-8 resolved it.
+- The next failure was missing `.ico` icon. Adding `src-tauri/icons/icon.ico` and declaring it in `bundle.icon` resolved it.
+- Build warnings about frontend chunk size remain non-blocking for MVP.
 
-## Remaining Blocker
+## Artifact Sizes
 
-Visual Studio Build Tools with the Visual C++ workload is not installed.
+- fukidashi-studio.exe: 10,737,152 bytes
+- Fukidashi Studio_0.1.0_x64_en-US.msi: 3,366,912 bytes
+- Fukidashi Studio_0.1.0_x64-setup.exe: 2,252,703 bytes
 
-Attempted commands:
-
-```powershell
-winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --source winget --accept-package-agreements --accept-source-agreements --silent --override "--wait --quiet --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
-winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --source winget --accept-package-agreements --accept-source-agreements --interactive --override "--wait --passive --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
-```
-
-Both attempts exited with `1602`. The Visual Studio installer log says:
-
-```text
-User may have declined UAC prompt
-Error 0x80070642: Failed to start the process
-```
-
-A direct administrator launch of `vs_BuildTools.exe` also returned:
-
-```text
-The operation was canceled by the user.
-```
-
-## Next Action
-
-Approve the UAC prompt for Visual Studio Build Tools installation, or install manually with:
-
-```powershell
-winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --source winget --accept-package-agreements --accept-source-agreements --interactive --override "--wait --passive --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
-```
-
-After installation:
-
-```powershell
-cd D:\SougouStartFolder\Fukidashi_Studio\md
-$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
-pnpm tauri info
-pnpm tauri build
-```
