@@ -31,12 +31,15 @@
 
 ## Tauriビルドの残ブロッカー
 
-現在のPC環境では以下が未検出です。
+Rust/rustup/Cargo はwingetで導入済みです。現在の残ブロッカーは Visual Studio Build Tools with Visual C++ workload のみです。
 
-- Visual Studio C++ Build Tools with MSVC and SDK components
-- Rust / rustup / Cargo
+pnpm tauri build はフロントエンドビルドとRust crates取得後、以下で停止しました。
 
-WebView2、Node.js、pnpm、Tauri JSパッケージは検出済みです。
+`	ext
+error: linker `link.exe` not found
+` 
+
+Build Tools導入はwingetと直接管理者起動の両方を試しましたが、UACキャンセル相当の1602で中断されました。詳細は docs/TAURI_BUILD_ATTEMPT.md を参照してください。
 
 ## 既知の注意
 
@@ -44,4 +47,5 @@ WebView2、Node.js、pnpm、Tauri JSパッケージは検出済みです。
 - Tauriデスクトップ版の実機起動はRust/C++ Build Tools導入後に実施します。
 - SVGテンプレはMVP対象外です。PNG/JPEG/WebPのみを扱います。
 - Fabric.jsを含むため、本番ビルドJSは500KB警告が出ます。MVPでは許容し、必要なら後続でコード分割します。
+
 
