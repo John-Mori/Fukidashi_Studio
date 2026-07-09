@@ -21,7 +21,7 @@ export function SidePanel(props: SidePanelProps) {
       <section className="panel-section compact-actions">
         <h2>追加</h2>
         <button onClick={props.onAddText}><Type size={17} />テキスト</button>
-        <button onClick={() => props.onAddShape("rect")}><Square size={17} />四角</button>
+        <button onClick={() => props.onAddShape("rect")}><Square size={17} />縦長四角</button>
         <button onClick={() => props.onAddShape("ellipse")}><Circle size={17} />楕円</button>
         <button onClick={() => props.onAddShape("line")}><MousePointer2 size={17} />直線</button>
       </section>
@@ -29,7 +29,7 @@ export function SidePanel(props: SidePanelProps) {
       <section className="panel-section">
         <div className="section-heading-row">
           <h2>吹き出し</h2>
-          <button className="mini-button" onClick={props.onImportTemplate}>Import</button>
+          <button className="mini-button" onClick={props.onImportTemplate}>追加</button>
         </div>
         {props.project.assets.templates.length === 0 ? (
           <div className="empty-box">吹き出しテンプレがありません</div>

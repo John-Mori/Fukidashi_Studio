@@ -54,7 +54,7 @@ export function createTextObject(partial: Partial<TextObject> = {}): TextObject 
   return {
     id: partial.id ?? timestampId,
     type: "text",
-    name: partial.name ?? "Text",
+    name: partial.name ?? "文字",
     text: partial.text ?? "セリフ",
     writingMode: partial.writingMode ?? "vertical",
     fontFamily: partial.fontFamily ?? "BIZ UDPGothic, Yu Gothic UI, Meiryo, sans-serif",
@@ -79,19 +79,20 @@ export function createTextObject(partial: Partial<TextObject> = {}): TextObject 
 }
 
 export function createShapeObject(kind: ShapeKind, canvas: CanvasSize, fill = "#ffffff", stroke = "#111111") {
-  const width = kind === "line" ? Math.min(260, canvas.width * 0.35) : Math.min(220, canvas.width * 0.3);
-  const height = kind === "line" ? 0 : Math.min(120, canvas.height * 0.12);
+  const isRect = kind === "rect";
+  const width = kind === "line" ? Math.min(260, canvas.width * 0.35) : isRect ? Math.min(170, canvas.width * 0.22) : Math.min(220, canvas.width * 0.3);
+  const height = kind === "line" ? 0 : isRect ? Math.min(340, canvas.height * 0.28) : Math.min(120, canvas.height * 0.12);
   return {
     id: createId("shape"),
     type: "shape" as const,
     kind,
-    name: kind === "rect" ? "Rectangle" : kind === "ellipse" ? "Ellipse" : "Line",
+    name: kind === "rect" ? "縦長四角" : kind === "ellipse" ? "楕円" : "直線",
     width,
     height,
     fill: kind === "line" ? "transparent" : fill,
     stroke,
     strokeWidth: 4,
-    transform: createDefaultTransform(canvas.width * 0.35, canvas.height * 0.35),
+    transform: createDefaultTransform(canvas.width * 0.5 - width / 2, canvas.height * 0.34 - height / 2),
     opacity: 1,
     visible: true,
     locked: false,

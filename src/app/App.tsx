@@ -7,8 +7,10 @@ import { HeaderToolbar } from "../components/toolbar/HeaderToolbar";
 import type { FabricEditorAdapter } from "../editor/fabric/FabricEditorAdapter";
 import { clearAutosave, loadAutosave, saveAutosave } from "../project/autosave/autosave";
 import { createEmptyProject, createId, nowIso } from "../project/model/defaults";
-import type { BaseImageAsset, EditorObject, ProjectDocument, ShapeKind, TemplateAsset, TextObject } from "../project/model/types";
+import { createFrameTextPatch, findPairedFrameText, isTextFrameObject, objectDisplayCenter, objectDisplaySize, type TextFrameObject } from "../project/model/frameText";
+import type { BaseImageAsset, BubbleObject, EditorObject, ProjectDocument, ShapeKind, TemplateAsset, TextObject } from "../project/model/types";
 import { readFileAsDataUrl, loadImageSize, downloadDataUrl } from "../platform/browser/fileHelpers";
+import { makeBubbleFrameWhiteTransparent } from "../platform/browser/imageProcessing";
 import { getSelectedType, useProjectStore } from "../store/projectStore";
 import "../styles/global.css";
 
@@ -187,15 +189,17 @@ export function App() {
     if (!files || files.length === 0) return;
     let imported = 0;
     for (const file of Array.from(files)) {
-      if (!SUPPORTED_IMAGE_TYPES.has(file.type)) continue;
+      const mimeType = detectSupportedImageType(file);
+      if (!mimeType) continue;
+      const normalizedFile = file.type === mimeType ? file : new File([file], imageFileName(file), { type: mimeType, lastModified: file.lastModified });
       try {
-        const dataUrl = await readFileAsDataUrl(file);
+        const dataUrl = await readFileAsDataUrl(normalizedFile);
         const size = await loadImageSize(dataUrl);
         const asset: TemplateAsset = {
           id: createId("template"),
-          name: fileStem(file.name),
-          originalFileName: file.name,
-          mimeType: file.type,
+          name: fileStem(normalizedFile.name),
+          originalFileName: normalizedFile.name,
+          mimeType,
           width: size.width,
           height: size.height,
           dataUrl,
@@ -204,7 +208,7 @@ export function App() {
         addTemplate(asset);
         imported += 1;
       } catch {
-        pushToast(`${file.name} をテンプレとして読み込めませんでした。`, "warning");
+        pushToast(`${normalizedFile.name} をテンプレとして読み込めませんでした。`, "warning");
       }
     }
     if (templateInputRef.current) templateInputRef.current.value = "";
@@ -251,6 +255,55 @@ export function App() {
     if (!ensureImage()) return;
     await engineRef.current?.addTemplateBubble(asset);
     setActiveTool("select");
+  };
+
+  const handleSetFrameText = async (frame: TextFrameObject, text: string) => {
+    if (!ensureImage()) return;
+    const existingText = findPairedFrameText(project.objects, frame);
+    const patch = createFrameTextPatch(frame, text, { existingText, fill: currentColor });
+    if (existingText) {
+      engineRef.current?.updateObject(existingText.id, patch as Partial<EditorObject>, true);
+      if (frame.pairId !== existingText.id) {
+        engineRef.current?.updateObject(frame.id, { pairId: existingText.id } as Partial<EditorObject>, false);
+      }
+    } else {
+      const textId = await engineRef.current?.addText({ ...patch, pairId: frame.id } as Partial<TextObject>);
+      if (!textId) return;
+      engineRef.current?.updateObject(frame.id, { pairId: textId } as Partial<EditorObject>, false);
+    }
+    engineRef.current?.selectObject(frame.id);
+  };
+
+  const handleCleanBubbleFrame = async (bubble: BubbleObject) => {
+    const asset = project.assets.templates.find((candidate) => candidate.id === bubble.assetId);
+    if (!asset) {
+      pushToast("処理する吹き出し画像が見つかりません。", "warning");
+      return;
+    }
+    try {
+      const dataUrl = await makeBubbleFrameWhiteTransparent(asset.dataUrl);
+      const size = await loadImageSize(dataUrl);
+      const next: ProjectDocument = {
+        ...project,
+        assets: {
+          ...project.assets,
+          templates: project.assets.templates.map((candidate) => candidate.id === asset.id ? {
+            ...candidate,
+            mimeType: "image/png",
+            width: size.width,
+            height: size.height,
+            dataUrl,
+          } : candidate),
+        },
+      };
+      setProject(next, true);
+      await engineRef.current?.restore(next, false);
+      setSelectedIds([bubble.id]);
+      engineRef.current?.selectObject(bubble.id);
+      pushToast("吹き出しを内側白・外側透明にしました。", "success");
+    } catch {
+      pushToast("透過処理に失敗しました。黒い線が閉じた画像か確認してください。", "error");
+    }
   };
 
   const handlePatchObject = (id: string, patch: Partial<EditorObject>) => {
@@ -303,59 +356,43 @@ export function App() {
 
   const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    const file = Array.from(event.dataTransfer.files).find((candidate) => SUPPORTED_IMAGE_TYPES.has(candidate.type));
+    const file = Array.from(event.dataTransfer.files).find((candidate) => detectSupportedImageType(candidate));
     if (file) await loadBaseImageFile(file);
   };
 
   const handleToggleVisible = (object: EditorObject) => handlePatchObject(object.id, { visible: !object.visible } as Partial<EditorObject>);
   const handleToggleLocked = (object: EditorObject) => handlePatchObject(object.id, { locked: !object.locked } as Partial<EditorObject>);
 
-  const objectSize = (object: EditorObject) => {
-    if (object.type === "text") {
-      const lineCount = object.writingMode === "vertical"
-        ? Math.max(1, Array.from(object.text.replace(/\n/g, "")).length)
-        : Math.max(1, object.text.split("\n").length);
-      return {
-        width: object.width * object.transform.scaleX,
-        height: object.fontSize * object.lineHeight * lineCount * object.transform.scaleY,
-      };
-    }
-    return {
-      width: object.width * object.transform.scaleX,
-      height: object.height * object.transform.scaleY,
-    };
-  };
-
-  const objectCenter = (object: EditorObject) => {
-    const size = objectSize(object);
-    return {
-      x: object.transform.x + size.width / 2,
-      y: object.transform.y + size.height / 2,
-    };
-  };
+  const objectSize = objectDisplaySize;
+  const objectCenter = objectDisplayCenter;
 
   const handleLinkNearestBubble = (text: TextObject) => {
-    const bubbles = project.objects.filter((object) => object.type === "bubble");
-    if (bubbles.length === 0) {
-      pushToast("リンクできる吹き出しがありません。", "warning");
+    const frames = project.objects.filter(isTextFrameObject);
+    if (frames.length === 0) {
+      pushToast("リンクできる枠がありません。", "warning");
       return;
     }
     const textCenter = objectCenter(text);
-    const nearest = bubbles.reduce((best, bubble) => {
-      const center = objectCenter(bubble);
+    const nearest = frames.reduce((best, frame) => {
+      const center = objectCenter(frame);
       const distance = (center.x - textCenter.x) ** 2 + (center.y - textCenter.y) ** 2;
-      return !best || distance < best.distance ? { bubble, distance } : best;
-    }, undefined as { bubble: EditorObject; distance: number } | undefined)?.bubble;
+      return !best || distance < best.distance ? { frame, distance } : best;
+    }, undefined as { frame: TextFrameObject; distance: number } | undefined)?.frame;
     if (!nearest) return;
     engineRef.current?.updateObject(text.id, { pairId: nearest.id } as Partial<EditorObject>, true);
     engineRef.current?.updateObject(nearest.id, { pairId: text.id } as Partial<EditorObject>, true);
-    pushToast("最寄りの吹き出しとリンクしました。", "success");
+    pushToast("最寄りの枠とリンクしました。", "success");
   };
 
   const handleCenterPair = (object: EditorObject) => {
     const pair = project.objects.find((candidate) => candidate.id === object.pairId);
     if (!pair) {
-      pushToast("先に吹き出しとリンクしてください。", "warning");
+      pushToast("先に枠とリンクしてください。", "warning");
+      return;
+    }
+    if (object.type === "text" && isTextFrameObject(pair)) {
+      const patch = createFrameTextPatch(pair, object.text, { existingText: object, fill: object.fill });
+      engineRef.current?.updateObject(object.id, patch as Partial<EditorObject>, true);
       return;
     }
     const pairCenter = objectCenter(pair);
@@ -419,7 +456,10 @@ export function App() {
           onToggleVisible={handleToggleVisible}
           onToggleLocked={handleToggleLocked}
         />
-        <section className="preview-panel">
+        <section className={project.assets.baseImage ? "preview-panel" : "preview-panel is-empty"}>
+          {!project.assets.baseImage && (
+            <div className="portrait-drop-guide" aria-hidden="true" />
+          )}
           {!project.assets.baseImage && (
             <div className="empty-canvas-state">
               <strong>画像をここへドロップ / 貼り付け</strong>
@@ -441,7 +481,7 @@ export function App() {
         </section>
       </main>
 
-      <Inspector project={project} selectedObject={selectedObject} currentColor={currentColor} onPatch={handlePatchObject} onSetCurrentColor={setCurrentColor} onLinkNearestBubble={handleLinkNearestBubble} onCenterPair={handleCenterPair} />
+      <Inspector project={project} selectedObject={selectedObject} currentColor={currentColor} onPatch={handlePatchObject} onSetCurrentColor={setCurrentColor} onLinkNearestBubble={handleLinkNearestBubble} onCenterPair={handleCenterPair} onSetFrameText={(frame, text) => void handleSetFrameText(frame, text)} onCleanBubbleFrame={(bubble) => void handleCleanBubbleFrame(bubble)} />
       <StatusBar project={project} zoom={zoom} selectedType={selectedType} currentColor={currentColor} autosaveAvailable={autosaveAvailable} />
 
       <div className="autosave-actions">
