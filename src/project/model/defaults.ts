@@ -122,10 +122,30 @@ export function createBubbleObject(asset: TemplateAsset, canvas: CanvasSize) {
   };
 }
 
+function verticalGlyphs(line: string): string[] {
+  const glyphs: string[] = [];
+  for (let index = 0; index < line.length;) {
+    if (line.startsWith("...", index)) {
+      glyphs.push("︙");
+      index += 3;
+      continue;
+    }
+    const char = line[index];
+    if (char === "…" || char === "⋯") {
+      glyphs.push("︙");
+      index += 1;
+      continue;
+    }
+    glyphs.push(...Array.from(char));
+    index += char.length;
+  }
+  return glyphs;
+}
+
 export function displayTextForWritingMode(text: string, mode: WritingMode): string {
   if (mode === "horizontal") return text;
   return text
     .split("\n")
-    .map((line) => Array.from(line).join("\n"))
+    .map((line) => verticalGlyphs(line).join("\n"))
     .join("\n\n");
 }

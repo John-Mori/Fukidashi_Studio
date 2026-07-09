@@ -7,7 +7,7 @@ import { HeaderToolbar } from "../components/toolbar/HeaderToolbar";
 import type { FabricEditorAdapter } from "../editor/fabric/FabricEditorAdapter";
 import { clearAutosave, loadAutosave, saveAutosave } from "../project/autosave/autosave";
 import { createEmptyProject, createId, nowIso } from "../project/model/defaults";
-import { createFrameTextPatch, findPairedFrameText, isTextFrameObject, objectDisplayCenter, objectDisplaySize, type TextFrameObject } from "../project/model/frameText";
+import { createFrameTextLayout, createFrameTextPatch, findPairedFrameText, isTextFrameObject, objectDisplayCenter, objectDisplaySize, type TextFrameObject } from "../project/model/frameText";
 import type { BaseImageAsset, BubbleObject, EditorObject, ProjectDocument, ShapeKind, TemplateAsset, TextObject } from "../project/model/types";
 import { readFileAsDataUrl, loadImageSize, downloadDataUrl } from "../platform/browser/fileHelpers";
 import { makeBubbleFrameWhiteTransparent } from "../platform/browser/imageProcessing";
@@ -15,6 +15,7 @@ import { getSelectedType, useProjectStore } from "../store/projectStore";
 import "../styles/global.css";
 
 const SUPPORTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const HIGH_QUALITY_EXPORT_SCALE = 2;
 const IMAGE_TYPE_BY_EXTENSION: Record<string, string> = {
   ".jpeg": "image/jpeg",
   ".jpg": "image/jpeg",
@@ -43,6 +44,22 @@ function imageFileName(file: File): string {
   const mimeType = detectSupportedImageType(file) ?? "image/png";
   const extension = mimeType === "image/jpeg" ? "jpg" : mimeType.replace("image/", "");
   return `clipboard-image-${Date.now()}.${extension}`;
+}
+
+function mergeObjectPatch<T extends EditorObject>(object: T, patch: Partial<EditorObject>): T {
+  return {
+    ...object,
+    ...patch,
+    transform: patch.transform ? { ...object.transform, ...patch.transform } : object.transform,
+  } as T;
+}
+
+function patchAffectsFrameLayout(patch: Partial<EditorObject>): boolean {
+  return Boolean(patch.transform || "width" in patch || "height" in patch);
+}
+
+function patchAffectsTextLayout(patch: Partial<EditorObject>): boolean {
+  return Boolean("text" in patch || "writingMode" in patch || "fontSize" in patch || "lineHeight" in patch || "charSpacing" in patch || "fontWeight" in patch);
 }
 
 export function App() {
@@ -260,14 +277,17 @@ export function App() {
   const handleSetFrameText = async (frame: TextFrameObject, text: string) => {
     if (!ensureImage()) return;
     const existingText = findPairedFrameText(project.objects, frame);
-    const patch = createFrameTextPatch(frame, text, { existingText, fill: currentColor });
+    const layout = createFrameTextLayout(frame, text, { existingText, fill: currentColor });
+    if (layout.framePatch) {
+      engineRef.current?.updateObject(frame.id, layout.framePatch as Partial<EditorObject>, true);
+    }
     if (existingText) {
-      engineRef.current?.updateObject(existingText.id, patch as Partial<EditorObject>, true);
+      engineRef.current?.updateObject(existingText.id, layout.textPatch as Partial<EditorObject>, !layout.framePatch);
       if (frame.pairId !== existingText.id) {
         engineRef.current?.updateObject(frame.id, { pairId: existingText.id } as Partial<EditorObject>, false);
       }
     } else {
-      const textId = await engineRef.current?.addText({ ...patch, pairId: frame.id } as Partial<TextObject>);
+      const textId = await engineRef.current?.addText({ ...layout.textPatch, pairId: frame.id } as Partial<TextObject>);
       if (!textId) return;
       engineRef.current?.updateObject(frame.id, { pairId: textId } as Partial<EditorObject>, false);
     }
@@ -307,6 +327,39 @@ export function App() {
   };
 
   const handlePatchObject = (id: string, patch: Partial<EditorObject>) => {
+    const current = project.objects.find((object) => object.id === id);
+    if (!current) {
+      engineRef.current?.updateObject(id, patch, true);
+      return;
+    }
+
+    if (current.type === "text" && patchAffectsTextLayout(patch)) {
+      const nextText = mergeObjectPatch(current, patch) as TextObject;
+      const frame = nextText.pairId ? project.objects.find((candidate) => candidate.id === nextText.pairId) : undefined;
+      if (isTextFrameObject(frame)) {
+        const layout = createFrameTextLayout(frame, nextText.text, { existingText: nextText, fill: nextText.fill });
+        if (layout.framePatch) {
+          engineRef.current?.updateObject(frame.id, layout.framePatch as Partial<EditorObject>, true);
+        }
+        engineRef.current?.updateObject(nextText.id, layout.textPatch as Partial<EditorObject>, !layout.framePatch);
+        return;
+      }
+    }
+
+    if (isTextFrameObject(current) && patchAffectsFrameLayout(patch)) {
+      const nextFrame = mergeObjectPatch(current, patch) as TextFrameObject;
+      const existingText = findPairedFrameText(project.objects, current);
+      engineRef.current?.updateObject(id, patch, true);
+      if (existingText) {
+        const layout = createFrameTextLayout(nextFrame, existingText.text, { existingText, fill: existingText.fill });
+        if (layout.framePatch) {
+          engineRef.current?.updateObject(id, layout.framePatch as Partial<EditorObject>, false);
+        }
+        engineRef.current?.updateObject(existingText.id, layout.textPatch as Partial<EditorObject>, false);
+      }
+      return;
+    }
+
     engineRef.current?.updateObject(id, patch, true);
   };
 
@@ -323,12 +376,18 @@ export function App() {
   const handleExport = async () => {
     if (!ensureImage()) return;
     try {
-      const dataUrl = await engineRef.current?.exportImage({ format: project.settings.exportFormat, quality: project.settings.exportQuality });
+      const dataUrl = await engineRef.current?.exportImage({
+        format: project.settings.exportFormat,
+        quality: project.settings.exportQuality,
+        renderScale: HIGH_QUALITY_EXPORT_SCALE,
+      });
       if (!dataUrl) return;
-      downloadDataUrl(dataUrl, `${project.name || "fukidashi"}_${project.canvas.width}x${project.canvas.height}.png`);
-      pushToast("元画像サイズでPNGを書き出しました。", "success");
+      const width = Math.round(project.canvas.width * HIGH_QUALITY_EXPORT_SCALE);
+      const height = Math.round(project.canvas.height * HIGH_QUALITY_EXPORT_SCALE);
+      downloadDataUrl(dataUrl, `${project.name || "fukidashi"}_${width}x${height}.png`);
+      pushToast("追加素材を高解像度で画像保存しました。", "success");
     } catch {
-      pushToast("書き出しに失敗しました。", "error");
+      pushToast("画像保存に失敗しました。", "error");
     }
   };
 

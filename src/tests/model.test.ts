@@ -1,6 +1,6 @@
 ﻿import { describe, expect, it } from "vitest";
 import { createEmptyProject, createShapeObject, createTextObject, displayTextForWritingMode } from "../project/model/defaults";
-import { createFrameTextPatch, frameTextPadding, isTextFrameObject } from "../project/model/frameText";
+import { createFrameTextLayout, createFrameTextPatch, frameTextPadding, isTextFrameObject } from "../project/model/frameText";
 
 describe("project model", () => {
   it("creates a variable-size project document", () => {
@@ -14,6 +14,11 @@ describe("project model", () => {
     const text = createTextObject({ text: "こんにちは" });
     expect(text.writingMode).toBe("vertical");
     expect(displayTextForWritingMode(text.text, text.writingMode)).toBe("こ\nん\nに\nち\nは");
+  });
+
+  it("uses vertical dots for ellipsis in vertical writing", () => {
+    expect(displayTextForWritingMode("え…", "vertical")).toBe("え\n︙");
+    expect(displayTextForWritingMode("え...", "vertical")).toBe("え\n︙");
   });
 
   it("defaults rectangle objects to a portrait frame", () => {
@@ -32,5 +37,15 @@ describe("project model", () => {
     expect(patch.transform?.x).toBeCloseTo(rect.transform.x + padding);
     expect(patch.pairId).toBe(rect.id);
     expect(patch.strokeEnabled).toBe(false);
+  });
+
+  it("expands a shape frame when linked text needs more room", () => {
+    const rect = createShapeObject("rect", { width: 852, height: 1280 });
+    if (!isTextFrameObject(rect)) throw new Error("Expected text frame");
+    const tinyRect = { ...rect, width: 40, height: 60 };
+    const layout = createFrameTextLayout(tinyRect, "とても長いセリフです");
+    expect(layout.framePatch?.width).toBeGreaterThan(tinyRect.width);
+    expect(layout.framePatch?.height).toBeGreaterThan(tinyRect.height);
+    expect(layout.textPatch.pairId).toBe(tinyRect.id);
   });
 });

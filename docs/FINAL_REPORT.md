@@ -17,7 +17,7 @@
 - Undo / Redo
 - プロジェクトJSON保存/読込
 - localStorage自動保存/復旧
-- 元画像ピクセル寸法でのPNG/JPEG/WebP書き出し経路
+- 追加素材がぼやけにくい高解像度PNG保存経路
 - Python画像検査CLI
 - Tauri 2骨格、dialog/fsプラグイン設定、CSP設定
 - Windows向けTauriビルド、MSI/NSISインストーラ生成

@@ -128,4 +128,5 @@ export type ViewState = {
 export type ExportOptions = {
   format: ExportFormat;
   quality: number;
+  renderScale?: number;
 };

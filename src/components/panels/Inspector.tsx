@@ -13,8 +13,49 @@ type InspectorProps = {
   onCleanBubbleFrame: (object: BubbleObject) => void;
 };
 
+type NumberFieldProps = {
+  label: string;
+  value: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  onChange: (value: number) => void;
+};
+
 function numberValue(value: number, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
+}
+
+function clampValue(value: number, min?: number, max?: number) {
+  let next = value;
+  if (typeof min === "number") next = Math.max(min, next);
+  if (typeof max === "number") next = Math.min(max, next);
+  return next;
+}
+
+function NumberField({ label, value, min, max, step = 1, onChange }: NumberFieldProps) {
+  const shownValue = numberValue(value, 0);
+  const commit = (next: number) => onChange(clampValue(next, min, max));
+  return (
+    <label className="number-field">
+      {label}
+      <span className="number-control">
+        <input type="number" min={min} max={max} step={step} value={shownValue} onChange={(event) => commit(Number(event.target.value))} />
+        <span className="number-buttons">
+          <button type="button" title={`${label}を増やす`} onClick={() => commit(shownValue + step)}>↑</button>
+          <button type="button" title={`${label}を減らす`} onClick={() => commit(shownValue - step)}>↓</button>
+        </span>
+      </span>
+    </label>
+  );
+}
+
+function BoldButton({ active, onToggle }: { active: boolean; onToggle: () => void }) {
+  return (
+    <button type="button" className={active ? "format-button active" : "format-button"} onClick={onToggle}>
+      <strong>B</strong> 太字
+    </button>
+  );
 }
 
 export function Inspector({ project, selectedObject, currentColor, onPatch, onSetCurrentColor, onLinkNearestBubble, onCenterPair, onSetFrameText, onCleanBubbleFrame }: InspectorProps) {
@@ -38,26 +79,11 @@ export function Inspector({ project, selectedObject, currentColor, onPatch, onSe
   return (
     <footer className="inspector-panel">
       <div className="inspector-grid">
-        <label>
-          横位置
-          <input type="number" value={Math.round(selectedObject.transform.x)} onChange={(event) => patchTransform("x", Number(event.target.value))} />
-        </label>
-        <label>
-          縦位置
-          <input type="number" value={Math.round(selectedObject.transform.y)} onChange={(event) => patchTransform("y", Number(event.target.value))} />
-        </label>
-        <label>
-          横拡大
-          <input type="number" step="0.05" value={numberValue(selectedObject.transform.scaleX, 1)} onChange={(event) => patchTransform("scaleX", Number(event.target.value))} />
-        </label>
-        <label>
-          縦拡大
-          <input type="number" step="0.05" value={numberValue(selectedObject.transform.scaleY, 1)} onChange={(event) => patchTransform("scaleY", Number(event.target.value))} />
-        </label>
-        <label>
-          回転
-          <input type="number" value={Math.round(selectedObject.transform.rotation)} onChange={(event) => patchTransform("rotation", Number(event.target.value))} />
-        </label>
+        <NumberField label="横位置" value={Math.round(selectedObject.transform.x)} onChange={(value) => patchTransform("x", value)} />
+        <NumberField label="縦位置" value={Math.round(selectedObject.transform.y)} onChange={(value) => patchTransform("y", value)} />
+        <NumberField label="横拡大" value={numberValue(selectedObject.transform.scaleX, 1)} step={0.05} onChange={(value) => patchTransform("scaleX", value)} />
+        <NumberField label="縦拡大" value={numberValue(selectedObject.transform.scaleY, 1)} step={0.05} onChange={(value) => patchTransform("scaleY", value)} />
+        <NumberField label="回転" value={Math.round(selectedObject.transform.rotation)} onChange={(value) => patchTransform("rotation", value)} />
         <label>
           不透明度
           <input type="range" min="0" max="1" step="0.01" value={selectedObject.opacity} onChange={(event) => onPatch(selectedObject.id, { opacity: Number(event.target.value) } as Partial<EditorObject>)} />
@@ -70,7 +96,7 @@ export function Inspector({ project, selectedObject, currentColor, onPatch, onSe
         </label>
         {selectedObject.type === "text" && <TextInspector object={selectedObject} onPatch={onPatch} onSetCurrentColor={onSetCurrentColor} onLinkNearestBubble={onLinkNearestBubble} onCenterPair={onCenterPair} />}
         {selectedObject.type === "shape" && <ShapeInspector object={selectedObject} currentColor={currentColor} onPatch={onPatch} onSetCurrentColor={onSetCurrentColor} />}
-        {isTextFrameObject(selectedObject) && <FrameTextInspector object={selectedObject} pairedText={pairedFrameText} onSetFrameText={onSetFrameText} />}
+        {isTextFrameObject(selectedObject) && <FrameTextInspector object={selectedObject} pairedText={pairedFrameText} onPatch={onPatch} onSetFrameText={onSetFrameText} />}
         {selectedObject.type === "bubble" && <BubbleInspector object={selectedObject} onCleanBubbleFrame={onCleanBubbleFrame} />}
       </div>
     </footer>
@@ -80,10 +106,13 @@ export function Inspector({ project, selectedObject, currentColor, onPatch, onSe
 function TextInspector({ object, onPatch, onSetCurrentColor, onLinkNearestBubble, onCenterPair }: { object: TextObject; onPatch: (id: string, patch: Partial<EditorObject>) => void; onSetCurrentColor: (color: string) => void; onLinkNearestBubble: (object: TextObject) => void; onCenterPair: (object: EditorObject) => void }) {
   return (
     <>
-      <label className="wide-field">
+      <label className="wide-field text-edit-field">
         文字
         <textarea value={object.text} onChange={(event) => onPatch(object.id, { text: event.target.value } as Partial<EditorObject>)} />
       </label>
+      <div className="format-controls">
+        <BoldButton active={object.fontWeight === "bold"} onToggle={() => onPatch(object.id, { fontWeight: object.fontWeight === "bold" ? "normal" : "bold" } as Partial<EditorObject>)} />
+      </div>
       <label>
         文字方向
         <select value={object.writingMode} onChange={(event) => onPatch(object.id, { writingMode: event.target.value as TextObject["writingMode"] } as Partial<EditorObject>)}>
@@ -91,10 +120,7 @@ function TextInspector({ object, onPatch, onSetCurrentColor, onLinkNearestBubble
           <option value="horizontal">横</option>
         </select>
       </label>
-      <label>
-        文字サイズ
-        <input type="number" min="8" max="180" value={object.fontSize} onChange={(event) => onPatch(object.id, { fontSize: Number(event.target.value) } as Partial<EditorObject>)} />
-      </label>
+      <NumberField label="文字サイズ" min={8} max={180} value={object.fontSize} onChange={(value) => onPatch(object.id, { fontSize: value } as Partial<EditorObject>)} />
       <label>
         文字色
         <input type="color" value={object.fill} onChange={(event) => { onSetCurrentColor(event.target.value); onPatch(object.id, { fill: event.target.value } as Partial<EditorObject>); }} />
@@ -103,21 +129,9 @@ function TextInspector({ object, onPatch, onSetCurrentColor, onLinkNearestBubble
         フチ色
         <input type="color" value={object.stroke} onChange={(event) => onPatch(object.id, { stroke: event.target.value } as Partial<EditorObject>)} />
       </label>
-      <label>
-        フチ幅
-        <input type="number" min="0" max="20" value={object.strokeWidth} onChange={(event) => onPatch(object.id, { strokeWidth: Number(event.target.value), strokeEnabled: Number(event.target.value) > 0 } as Partial<EditorObject>)} />
-      </label>
-      <label>
-        文字枠幅
-        <input type="number" min="20" max="1000" value={object.width} onChange={(event) => onPatch(object.id, { width: Number(event.target.value) } as Partial<EditorObject>)} />
-      </label>
-      <label>
-        行間
-        <input type="number" step="0.05" min="0.5" max="3" value={object.lineHeight} onChange={(event) => onPatch(object.id, { lineHeight: Number(event.target.value) } as Partial<EditorObject>)} />
-      </label>
-      <label className="toggle-label">
-        <input type="checkbox" checked={object.fontWeight === "bold"} onChange={(event) => onPatch(object.id, { fontWeight: event.target.checked ? "bold" : "normal" } as Partial<EditorObject>)} /> 太字
-      </label>
+      <NumberField label="フチ幅" min={0} max={20} value={object.strokeWidth} onChange={(value) => onPatch(object.id, { strokeWidth: value, strokeEnabled: value > 0 } as Partial<EditorObject>)} />
+      <NumberField label="文字枠幅" min={20} max={1000} value={object.width} onChange={(value) => onPatch(object.id, { width: value } as Partial<EditorObject>)} />
+      <NumberField label="行間" min={0.5} max={3} step={0.05} value={object.lineHeight} onChange={(value) => onPatch(object.id, { lineHeight: value } as Partial<EditorObject>)} />
       <button type="button" onClick={() => onLinkNearestBubble(object)}>近い枠にリンク</button>
       <button type="button" onClick={() => onCenterPair(object)}>枠中央へ配置</button>
     </>
@@ -127,16 +141,8 @@ function TextInspector({ object, onPatch, onSetCurrentColor, onLinkNearestBubble
 function ShapeInspector({ object, currentColor, onPatch, onSetCurrentColor }: { object: ShapeObject; currentColor: string; onPatch: (id: string, patch: Partial<EditorObject>) => void; onSetCurrentColor: (color: string) => void }) {
   return (
     <>
-      <label>
-        幅
-        <input type="number" min="1" max="2000" value={object.width} onChange={(event) => onPatch(object.id, { width: Number(event.target.value) } as Partial<EditorObject>)} />
-      </label>
-      {object.kind !== "line" && (
-        <label>
-          高さ
-          <input type="number" min="1" max="2000" value={object.height} onChange={(event) => onPatch(object.id, { height: Number(event.target.value) } as Partial<EditorObject>)} />
-        </label>
-      )}
+      <NumberField label="幅" min={1} max={2000} value={object.width} onChange={(value) => onPatch(object.id, { width: value } as Partial<EditorObject>)} />
+      {object.kind !== "line" && <NumberField label="高さ" min={1} max={2000} value={object.height} onChange={(value) => onPatch(object.id, { height: value } as Partial<EditorObject>)} />}
       {object.kind !== "line" && (
         <label>
           塗り
@@ -147,21 +153,24 @@ function ShapeInspector({ object, currentColor, onPatch, onSetCurrentColor }: { 
         線色
         <input type="color" value={object.stroke} onChange={(event) => { onSetCurrentColor(event.target.value); onPatch(object.id, { stroke: event.target.value } as Partial<EditorObject>); }} />
       </label>
-      <label>
-        線幅
-        <input type="number" min="0" max="80" value={object.strokeWidth} onChange={(event) => onPatch(object.id, { strokeWidth: Number(event.target.value) } as Partial<EditorObject>)} />
-      </label>
+      <NumberField label="線幅" min={0} max={80} value={object.strokeWidth} onChange={(value) => onPatch(object.id, { strokeWidth: value } as Partial<EditorObject>)} />
     </>
   );
 }
 
-function FrameTextInspector({ object, pairedText, onSetFrameText }: { object: TextFrameObject; pairedText?: TextObject; onSetFrameText: (object: TextFrameObject, text: string) => void }) {
+function FrameTextInspector({ object, pairedText, onPatch, onSetFrameText }: { object: TextFrameObject; pairedText?: TextObject; onPatch: (id: string, patch: Partial<EditorObject>) => void; onSetFrameText: (object: TextFrameObject, text: string) => void }) {
   return (
     <>
       <label className="wide-field frame-text-field">
         枠内文字
         <textarea placeholder="枠の中に入れる文字" value={pairedText?.text ?? ""} onChange={(event) => onSetFrameText(object, event.target.value)} />
       </label>
+      <div className="format-controls">
+        <BoldButton active={pairedText?.fontWeight === "bold"} onToggle={() => {
+          if (pairedText) onPatch(pairedText.id, { fontWeight: pairedText.fontWeight === "bold" ? "normal" : "bold" } as Partial<EditorObject>);
+          else onSetFrameText(object, "セリフ");
+        }} />
+      </div>
       <button type="button" onClick={() => onSetFrameText(object, pairedText?.text ?? "セリフ")}>余白を整える</button>
     </>
   );

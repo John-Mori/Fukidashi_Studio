@@ -310,21 +310,30 @@ export class FabricEditorAdapter {
 
   async exportImage(options: ExportOptions): Promise<string> {
     const json = this.canvas.toJSON(["data"]);
+    const exportScale = Math.max(1, options.renderScale ?? 1);
     const exportCanvas = new StaticCanvasClass(document.createElement("canvas"), {
       width: this.project.canvas.width,
       height: this.project.canvas.height,
       backgroundColor: "#ffffff",
+      enableRetinaScaling: false,
+      imageSmoothingEnabled: true,
     });
     const result = exportCanvas.loadFromJSON(json);
     if (result && typeof result.then === "function") await result;
     exportCanvas.setDimensions({ width: this.project.canvas.width, height: this.project.canvas.height });
     exportCanvas.viewportTransform = [1, 0, 0, 1, 0, 0];
+    exportCanvas.imageSmoothingEnabled = true;
+    exportCanvas.getObjects?.().forEach((object: FabricObject) => {
+      if (objectData(object).type === "bubble" || objectData(object).type === "text" || objectData(object).type === "shape") {
+        object.set?.({ objectCaching: false, noScaleCache: false, dirty: true });
+      }
+    });
     exportCanvas.requestRenderAll?.();
     exportCanvas.renderAll();
     const dataUrl = exportCanvas.toDataURL({
       format: options.format,
       quality: options.quality,
-      multiplier: 1,
+      multiplier: exportScale,
       left: 0,
       top: 0,
       width: this.project.canvas.width,

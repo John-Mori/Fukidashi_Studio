@@ -38,7 +38,7 @@ export function HeaderToolbar(props: HeaderToolbarProps) {
         <button title="プロジェクトJSONを開く" onClick={props.onOpenProject}><FolderOpen size={18} />プロジェクト</button>
         <button title="吹き出しテンプレを追加" onClick={props.onImportTemplate}><FilePlus2 size={18} />テンプレ</button>
         <button title="プロジェクトJSONを保存" onClick={props.onSaveProject}><Save size={18} />保存</button>
-        <button className="primary" title="画像を書き出し" onClick={props.onExport}><Download size={18} />書き出し</button>
+        <button className="primary" title="画像を保存" onClick={props.onExport}><Download size={18} />画像を保存</button>
       </div>
       <div className="toolbar-group icon-group">
         <button title="元に戻す" disabled={!props.canUndo} onClick={props.onUndo}><Undo2 size={18} /></button>
