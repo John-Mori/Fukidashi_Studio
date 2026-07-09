@@ -1,0 +1,65 @@
+﻿import { Download, Pipette, FileDown, FilePlus2, FolderOpen, FlipHorizontal2, ImagePlus, LayoutPanelLeft, Redo2, Save, Shapes, TextCursorInput, Trash2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
+
+type HeaderToolbarProps = {
+  canUndo: boolean;
+  canRedo: boolean;
+  zoom: number;
+  onOpenImage: () => void;
+  onOpenProject: () => void;
+  onImportTemplate: () => void;
+  onSaveProject: () => void;
+  onExport: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  onFit: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onAddText: () => void;
+  onAddRect: () => void;
+  onAddEllipse: () => void;
+  onAddLine: () => void;
+  onDelete: () => void;
+  onEyedropper: () => void;
+  onSwapLayout: () => void;
+};
+
+export function HeaderToolbar(props: HeaderToolbarProps) {
+  return (
+    <header className="header-toolbar">
+      <div className="brand-block">
+        <div className="brand-mark">FS</div>
+        <div>
+          <div className="brand-name">Fukidashi Studio</div>
+          <div className="brand-subtitle">local editor</div>
+        </div>
+      </div>
+      <div className="toolbar-group">
+        <button title="画像を開く" onClick={props.onOpenImage}><ImagePlus size={18} />Open</button>
+        <button title="プロジェクトJSONを開く" onClick={props.onOpenProject}><FolderOpen size={18} />Project</button>
+        <button title="テンプレを追加" onClick={props.onImportTemplate}><FilePlus2 size={18} />Template</button>
+        <button title="プロジェクトJSON保存" onClick={props.onSaveProject}><Save size={18} />Save</button>
+        <button className="primary" title="PNGを書き出し" onClick={props.onExport}><Download size={18} />Export</button>
+      </div>
+      <div className="toolbar-group icon-group">
+        <button title="Undo" disabled={!props.canUndo} onClick={props.onUndo}><Undo2 size={18} /></button>
+        <button title="Redo" disabled={!props.canRedo} onClick={props.onRedo}><Redo2 size={18} /></button>
+        <button title="削除" onClick={props.onDelete}><Trash2 size={18} /></button>
+      </div>
+      <div className="toolbar-group icon-group">
+        <button title="テキスト追加" onClick={props.onAddText}><TextCursorInput size={18} /></button>
+        <button title="四角形追加" onClick={props.onAddRect}><Shapes size={18} /></button>
+        <button title="楕円追加" onClick={props.onAddEllipse}><FlipHorizontal2 size={18} /></button>
+        <button title="直線追加" onClick={props.onAddLine}><FileDown size={18} /></button>
+        <button title="スポイト" onClick={props.onEyedropper}><Pipette size={18} /></button>
+      </div>
+      <div className="toolbar-group zoom-group">
+        <button title="縮小" onClick={props.onZoomOut}><ZoomOut size={18} /></button>
+        <button title="全体表示" onClick={props.onFit}>{Math.round(props.zoom * 100)}%</button>
+        <button title="拡大" onClick={props.onZoomIn}><ZoomIn size={18} /></button>
+      </div>
+      <button className="ghost-button" title="左右反転" onClick={props.onSwapLayout}><LayoutPanelLeft size={18} /></button>
+    </header>
+  );
+}
+
+
