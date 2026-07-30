@@ -41,6 +41,10 @@ function sortByZIndex(objects: EditorObject[]): EditorObject[] {
   return [...objects].sort((a, b) => a.zIndex - b.zIndex);
 }
 
+function usesTouchControls(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+}
+
 function objectData(object: FabricObject) {
   return object.data ?? {};
 }
@@ -63,6 +67,11 @@ function applyTransform(fabricObject: FabricObject, object: EditorObject): void 
     lockRotation: object.locked,
     lockScalingX: object.locked,
     lockScalingY: object.locked,
+    cornerSize: usesTouchControls() ? 22 : 13,
+    touchCornerSize: 40,
+    padding: usesTouchControls() ? 6 : 0,
+    transparentCorners: false,
+    cornerColor: "#4f9cff",
   });
 }
 
@@ -116,6 +125,7 @@ export class FabricEditorAdapter {
       backgroundColor: "#111827",
       stopContextMenu: true,
       fireRightClick: true,
+      allowTouchScrolling: false,
     });
     this.bindEvents();
   }

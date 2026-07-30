@@ -1,4 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useState } from "react";
+import { Maximize2, MousePointer2, PlusSquare, SlidersHorizontal, ZoomIn, ZoomOut } from "lucide-react";
 import { CanvasStage } from "../components/canvas/CanvasStage";
 import { Inspector } from "../components/panels/Inspector";
 import { SidePanel } from "../components/panels/SidePanel";
@@ -9,14 +11,19 @@ import { clearAutosave, loadAutosave, saveAutosave } from "../project/autosave/a
 import { createEmptyProject, createId, nowIso } from "../project/model/defaults";
 import { createFrameTextLayout, createFrameTextPatch, findPairedFrameText, isTextFrameObject, objectDisplayCenter, objectDisplaySize, type TextFrameObject } from "../project/model/frameText";
 import type { BaseImageAsset, BubbleObject, EditorObject, ProjectDocument, ShapeKind, TemplateAsset, TextObject } from "../project/model/types";
-import { readFileAsDataUrl, loadImageSize, downloadDataUrl } from "../platform/browser/fileHelpers";
+import { readFileAsDataUrl, loadImageSize, downloadDataUrl, saveImageDataUrl } from "../platform/browser/fileHelpers";
 import { makeBubbleFrameWhiteTransparent } from "../platform/browser/imageProcessing";
 import { getSelectedType, useProjectStore } from "../store/projectStore";
 import "../styles/global.css";
 
-const SUPPORTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+type MobilePanel = "canvas" | "add" | "adjust";
+
+const SUPPORTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/heic", "image/heif"]);
 const HIGH_QUALITY_EXPORT_SCALE = 2;
+const MOBILE_LAYOUT_QUERY = "(max-width: 720px), (max-width: 900px) and (max-height: 500px)";
 const IMAGE_TYPE_BY_EXTENSION: Record<string, string> = {
+  ".heic": "image/heic",
+  ".heif": "image/heif",
   ".jpeg": "image/jpeg",
   ".jpg": "image/jpeg",
   ".png": "image/png",
@@ -68,6 +75,7 @@ export function App() {
   const templateInputRef = useRef<HTMLInputElement | null>(null);
   const projectInputRef = useRef<HTMLInputElement | null>(null);
   const autosaveLoadedRef = useRef(false);
+  const [mobilePanel, setMobilePanel] = useState<MobilePanel>("canvas");
 
   const project = useProjectStore((state) => state.project);
   const past = useProjectStore((state) => state.past);
@@ -146,7 +154,7 @@ export function App() {
   const loadBaseImageFile = useCallback(async (file: File) => {
     const mimeType = detectSupportedImageType(file);
     if (!mimeType) {
-      pushToast("この画像形式は読み込めません。PNG / JPEG / WebP を使ってください。", "error");
+      pushToast("この画像形式は読み込めません。写真、PNG、JPEG、WebPを使ってください。", "error");
       return;
     }
     try {
@@ -168,6 +176,7 @@ export function App() {
       next.assets = { baseImage, templates: project.assets.templates };
       next.settings.layout.previewPosition = project.settings.layout.previewPosition;
       await restoreProject(next, true, true);
+      setMobilePanel("canvas");
       pushToast(`画像を開きました: ${size.width} x ${size.height}px`, "success");
     } catch {
       pushToast("画像を読み込めませんでした。ファイルを確認してください。", "error");
@@ -259,18 +268,21 @@ export function App() {
   const handleAddText = async () => {
     if (!ensureImage()) return;
     await engineRef.current?.addText({ fill: currentColor });
+    setMobilePanel("adjust");
     setActiveTool("select");
   };
 
   const handleAddShape = async (kind: ShapeKind) => {
     if (!ensureImage()) return;
     await engineRef.current?.addShape(kind, kind === "line" ? "transparent" : "#ffffff", currentColor);
+    setMobilePanel("adjust");
     setActiveTool("select");
   };
 
   const handleAddTemplate = async (asset: TemplateAsset) => {
     if (!ensureImage()) return;
     await engineRef.current?.addTemplateBubble(asset);
+    setMobilePanel("adjust");
     setActiveTool("select");
   };
 
@@ -384,8 +396,12 @@ export function App() {
       if (!dataUrl) return;
       const width = Math.round(project.canvas.width * HIGH_QUALITY_EXPORT_SCALE);
       const height = Math.round(project.canvas.height * HIGH_QUALITY_EXPORT_SCALE);
-      downloadDataUrl(dataUrl, `${project.name || "fukidashi"}_${width}x${height}.png`);
-      pushToast("追加素材を高解像度で画像保存しました。", "success");
+      const result = await saveImageDataUrl(dataUrl, `${project.name || "fukidashi"}_${width}x${height}.png`);
+      if (result === "shared") {
+        pushToast("共有メニューから写真またはファイルへ保存できます。", "success");
+      } else if (result === "downloaded") {
+        pushToast("追加素材を高解像度で画像保存しました。", "success");
+      }
     } catch {
       pushToast("画像保存に失敗しました。", "error");
     }
@@ -466,8 +482,8 @@ export function App() {
   };
 
   return (
-    <div className="app-root" onDragOver={(event) => event.preventDefault()} onDrop={handleDrop}>
-      <input ref={imageInputRef} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void handleImageInput(event.target.files)} />
+    <div className="app-root" data-mobile-panel={mobilePanel} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop}>
+      <input ref={imageInputRef} hidden type="file" accept="image/*" onChange={(event) => void handleImageInput(event.target.files)} />
       <input ref={templateInputRef} hidden type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => void handleTemplateInput(event.target.files)} />
       <input ref={projectInputRef} hidden type="file" accept="application/json,.json,.fukidashi.json" onChange={(event) => void handleProjectInput(event.target.files)} />
       <HeaderToolbar
@@ -510,6 +526,7 @@ export function App() {
           onAddShape={(kind) => void handleAddShape(kind)}
           onSelectObject={(id) => {
             setSelectedIds([id]);
+            setMobilePanel("adjust");
             engineRef.current?.selectObject(id);
           }}
           onToggleVisible={handleToggleVisible}
@@ -521,9 +538,9 @@ export function App() {
           )}
           {!project.assets.baseImage && (
             <div className="empty-canvas-state">
-              <strong>画像をここへドロップ / 貼り付け</strong>
-              <span>PNG / JPEG / WebP / Ctrl+V</span>
-              <button onClick={() => imageInputRef.current?.click()}>画像を開く</button>
+              <strong>編集する画像を選択</strong>
+              <span>写真アプリ / ファイル / ドロップ / 貼り付け</span>
+              <button onClick={() => imageInputRef.current?.click()}>写真・ファイルから選ぶ</button>
               {autosaveAvailable && <button className="secondary" onClick={() => void handleRestoreAutosave()}>自動保存を復旧</button>}
             </div>
           )}
@@ -532,16 +549,32 @@ export function App() {
             activeTool={activeTool}
             onReady={(engine) => { engineRef.current = engine; }}
             onCommit={(objects, history) => setObjectsFromCanvas(objects, history)}
-            onSelection={setSelectedIds}
+            onSelection={(ids) => {
+              setSelectedIds(ids);
+              if (ids.length > 0 && window.matchMedia(MOBILE_LAYOUT_QUERY).matches) setMobilePanel("adjust");
+            }}
             onZoom={setZoom}
             onColorPicked={setCurrentColor}
             onToast={pushToast}
           />
+          {project.assets.baseImage && (
+            <div className="mobile-canvas-tools" aria-label="表示倍率">
+              <button title="縮小" onClick={() => engineRef.current?.zoomBy(0.85)}><ZoomOut size={19} /></button>
+              <button title="全体表示" onClick={() => engineRef.current?.fitToViewport()}><Maximize2 size={19} /></button>
+              <button title="拡大" onClick={() => engineRef.current?.zoomBy(1.15)}><ZoomIn size={19} /></button>
+            </div>
+          )}
         </section>
       </main>
 
       <Inspector project={project} selectedObject={selectedObject} currentColor={currentColor} onPatch={handlePatchObject} onSetCurrentColor={setCurrentColor} onLinkNearestBubble={handleLinkNearestBubble} onCenterPair={handleCenterPair} onSetFrameText={(frame, text) => void handleSetFrameText(frame, text)} onCleanBubbleFrame={(bubble) => void handleCleanBubbleFrame(bubble)} />
       <StatusBar project={project} zoom={zoom} selectedType={selectedType} currentColor={currentColor} autosaveAvailable={autosaveAvailable} />
+
+      <nav className="mobile-nav" aria-label="スマホ編集メニュー">
+        <button className={mobilePanel === "canvas" ? "active" : ""} onClick={() => setMobilePanel("canvas")}><MousePointer2 size={20} />編集</button>
+        <button className={mobilePanel === "add" ? "active" : ""} onClick={() => setMobilePanel("add")}><PlusSquare size={20} />追加</button>
+        <button className={mobilePanel === "adjust" ? "active" : ""} onClick={() => setMobilePanel("adjust")}><SlidersHorizontal size={20} />調整</button>
+      </nav>
 
       <div className="autosave-actions">
         {autosaveAvailable && project.assets.baseImage && <button onClick={() => void handleRestoreAutosave()}>復旧</button>}
