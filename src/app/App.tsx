@@ -1,7 +1,8 @@
 ﻿import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useState } from "react";
-import { Maximize2, MousePointer2, PlusSquare, SlidersHorizontal, ZoomIn, ZoomOut } from "lucide-react";
+import { Grid3X3, Maximize2, MousePointer2, PlusSquare, SlidersHorizontal, ZoomIn, ZoomOut } from "lucide-react";
 import { CanvasStage } from "../components/canvas/CanvasStage";
+import { MosaicEditor } from "../components/mosaic/MosaicEditor";
 import { Inspector } from "../components/panels/Inspector";
 import { SidePanel } from "../components/panels/SidePanel";
 import { StatusBar } from "../components/panels/StatusBar";
@@ -76,6 +77,7 @@ export function App() {
   const projectInputRef = useRef<HTMLInputElement | null>(null);
   const autosaveLoadedRef = useRef(false);
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>("canvas");
+  const [mosaicOpen, setMosaicOpen] = useState(false);
 
   const project = useProjectStore((state) => state.project);
   const past = useProjectStore((state) => state.past);
@@ -338,6 +340,34 @@ export function App() {
     }
   };
 
+  const handleOpenMosaic = () => {
+    if (!ensureImage()) return;
+    setMosaicOpen(true);
+  };
+
+  const handleApplyMosaic = async (dataUrl: string) => {
+    const baseImage = project.assets.baseImage;
+    if (!baseImage) return;
+    const next: ProjectDocument = {
+      ...project,
+      assets: {
+        ...project.assets,
+        baseImage: {
+          ...baseImage,
+          name: `${fileStem(baseImage.name)}_mosaic.png`,
+          mimeType: "image/png",
+          dataUrl,
+        },
+      },
+    };
+    setProject(next, true);
+    setSelectedIds([]);
+    await engineRef.current?.restore(next, false);
+    setMosaicOpen(false);
+    setMobilePanel("canvas");
+    pushToast("モザイク加工を元画像へ適用しました。元に戻すこともできます。", "success");
+  };
+
   const handlePatchObject = (id: string, patch: Partial<EditorObject>) => {
     const current = project.objects.find((object) => object.id === id);
     if (!current) {
@@ -506,6 +536,7 @@ export function App() {
         onAddLine={() => void handleAddShape("line")}
         onDelete={() => engineRef.current?.deleteSelected()}
         onEyedropper={() => setActiveTool(activeTool === "eyedropper" ? "select" : "eyedropper")}
+        onMosaic={handleOpenMosaic}
         onSwapLayout={() => patchProject((draft) => ({
           ...draft,
           settings: {
@@ -573,6 +604,7 @@ export function App() {
       <nav className="mobile-nav" aria-label="スマホ編集メニュー">
         <button className={mobilePanel === "canvas" ? "active" : ""} onClick={() => setMobilePanel("canvas")}><MousePointer2 size={20} />編集</button>
         <button className={mobilePanel === "add" ? "active" : ""} onClick={() => setMobilePanel("add")}><PlusSquare size={20} />追加</button>
+        <button onClick={handleOpenMosaic}><Grid3X3 size={20} />モザイク</button>
         <button className={mobilePanel === "adjust" ? "active" : ""} onClick={() => setMobilePanel("adjust")}><SlidersHorizontal size={20} />調整</button>
       </nav>
 
@@ -581,6 +613,14 @@ export function App() {
         {autosaveAvailable && <button onClick={handleClearAutosave}>自動保存クリア</button>}
       </div>
       {toast && <div className={`toast ${toast.tone}`}>{toast.text}</div>}
+      {mosaicOpen && project.assets.baseImage && (
+        <MosaicEditor
+          sourceDataUrl={project.assets.baseImage.dataUrl}
+          imageName={project.assets.baseImage.name}
+          onCancel={() => setMosaicOpen(false)}
+          onApply={(dataUrl) => void handleApplyMosaic(dataUrl)}
+        />
+      )}
     </div>
   );
 }

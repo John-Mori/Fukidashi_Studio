@@ -1,5 +1,6 @@
 ﻿import { findPairedFrameText, isTextFrameObject, type TextFrameObject } from "../../project/model/frameText";
 import type { BubbleObject, EditorObject, ProjectDocument, ShapeObject, TextObject } from "../../project/model/types";
+import { MobileInspector } from "./MobileInspector";
 
 type InspectorProps = {
   project: ProjectDocument;
@@ -61,13 +62,16 @@ function BoldButton({ active, onToggle }: { active: boolean; onToggle: () => voi
 export function Inspector({ project, selectedObject, currentColor, onPatch, onSetCurrentColor, onLinkNearestBubble, onCenterPair, onSetFrameText, onCleanBubbleFrame }: InspectorProps) {
   if (!selectedObject) {
     return (
-      <footer className="inspector-panel">
-        <div className="inspector-empty">
-          <strong>キャンバス</strong>
-          <span>{project.canvas.width} x {project.canvas.height}px</span>
-          <span>画像を開いて、吹き出し・文字・図形を配置します。</span>
-        </div>
-      </footer>
+      <>
+        <footer className="inspector-panel desktop-inspector-panel">
+          <div className="inspector-empty">
+            <strong>キャンバス</strong>
+            <span>{project.canvas.width} x {project.canvas.height}px</span>
+            <span>画像を開いて、吹き出し・文字・図形を配置します。</span>
+          </div>
+        </footer>
+        <MobileInspector project={project} currentColor={currentColor} onPatch={onPatch} onSetCurrentColor={onSetCurrentColor} onLinkNearestBubble={onLinkNearestBubble} onCenterPair={onCenterPair} onSetFrameText={onSetFrameText} onCleanBubbleFrame={onCleanBubbleFrame} />
+      </>
     );
   }
 
@@ -77,7 +81,8 @@ export function Inspector({ project, selectedObject, currentColor, onPatch, onSe
   const pairedFrameText = isTextFrameObject(selectedObject) ? findPairedFrameText(project.objects, selectedObject) : undefined;
 
   return (
-    <footer className="inspector-panel">
+    <>
+      <footer className="inspector-panel desktop-inspector-panel">
       <div className="inspector-grid">
         <NumberField label="横位置" value={Math.round(selectedObject.transform.x)} onChange={(value) => patchTransform("x", value)} />
         <NumberField label="縦位置" value={Math.round(selectedObject.transform.y)} onChange={(value) => patchTransform("y", value)} />
@@ -99,7 +104,9 @@ export function Inspector({ project, selectedObject, currentColor, onPatch, onSe
         {isTextFrameObject(selectedObject) && <FrameTextInspector object={selectedObject} pairedText={pairedFrameText} onPatch={onPatch} onSetFrameText={onSetFrameText} />}
         {selectedObject.type === "bubble" && <BubbleInspector object={selectedObject} onCleanBubbleFrame={onCleanBubbleFrame} />}
       </div>
-    </footer>
+      </footer>
+      <MobileInspector project={project} selectedObject={selectedObject} currentColor={currentColor} onPatch={onPatch} onSetCurrentColor={onSetCurrentColor} onLinkNearestBubble={onLinkNearestBubble} onCenterPair={onCenterPair} onSetFrameText={onSetFrameText} onCleanBubbleFrame={onCleanBubbleFrame} />
+    </>
   );
 }
 
