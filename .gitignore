@@ -15,6 +15,6 @@ test-results/
 __pycache__/
 *.pyc
 .pytest_cache/
-local-projects/
-autosave/
-app-data/
+/local-projects/
+/autosave/
+/app-data/
