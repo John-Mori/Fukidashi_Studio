@@ -672,6 +672,141 @@ textarea {
   font-size: 11px;
 }
 
+.two-panel-editor {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: grid;
+  grid-template-rows: 58px minmax(0, 1fr) auto;
+  background: #0d1016;
+  color: #edf1f7;
+}
+
+.two-panel-topbar {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-bottom: 1px solid #2a303b;
+  background: #131720;
+}
+
+.two-panel-topbar > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.two-panel-topbar > div span {
+  color: #8e98aa;
+  font-size: 11px;
+}
+
+.two-panel-stage {
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 12px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    #0d1016;
+  background-size: 24px 24px;
+}
+
+.two-panel-preview {
+  position: relative;
+  flex: 0 0 auto;
+  overflow: hidden;
+  aspect-ratio: 9 / 16;
+  background: #050505;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.42);
+}
+
+.two-panel-preview canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.two-panel-seam {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  border-top: 1px dashed #78a4ff;
+  pointer-events: none;
+}
+
+.two-panel-selection {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  border: 2px solid #4f9cff;
+  pointer-events: none;
+}
+
+.two-panel-empty-slot {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  z-index: 4;
+  min-height: 52px;
+  border-style: dashed;
+  background: rgba(19, 23, 32, 0.88);
+}
+
+.two-panel-empty-slot.top { top: 22%; }
+.two-panel-empty-slot.bottom { bottom: 18%; }
+
+.two-panel-controls {
+  display: grid;
+  grid-template-columns: auto auto minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 11px max(16px, calc((100vw - 1180px) / 2));
+  padding-bottom: max(11px, env(safe-area-inset-bottom));
+  border-top: 1px solid #2a303b;
+  background: #131720;
+}
+
+.two-panel-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.two-panel-tabs button.active {
+  border-color: #78a4ff;
+  background: #2f6fed;
+  color: #ffffff;
+}
+
+.two-panel-controls > label {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  color: #aab4c4;
+  font-size: 12px;
+}
+
+.two-panel-controls > label > span {
+  display: flex;
+  justify-content: space-between;
+}
+
+.two-panel-controls > label b { color: #edf1f7; }
+
+.two-panel-error {
+  grid-column: 1 / -1;
+  color: #ffb0ae;
+  font-size: 12px;
+}
+
 .toast.success { border-color: #2f9e6b; }
 .toast.warning { border-color: #d99b2b; }
 .toast.error { border-color: #de4c4a; }
@@ -1152,7 +1287,7 @@ textarea {
   .mobile-nav {
     grid-row: 4;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 4px;
     padding: 5px 8px calc(5px + env(safe-area-inset-bottom));
     border-top: 1px solid #2a303b;
@@ -1214,6 +1349,51 @@ textarea {
     top: 62px;
     right: 10px;
     max-width: calc(100vw - 20px);
+  }
+
+  .two-panel-editor {
+    grid-template-rows: 54px minmax(0, 1fr) auto;
+    height: 100dvh;
+    max-height: 100dvh;
+  }
+
+  .two-panel-topbar {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    gap: 6px;
+    padding: 6px 8px;
+  }
+
+  .two-panel-topbar > div { display: none; }
+
+  .two-panel-topbar button {
+    min-width: 42px;
+    padding: 0 9px;
+  }
+
+  .two-panel-topbar .primary span { display: none; }
+
+  .two-panel-stage { padding: 8px; }
+
+  .two-panel-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    max-height: min(36dvh, 270px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 9px;
+    padding-bottom: max(9px, env(safe-area-inset-bottom));
+  }
+
+  .two-panel-tabs,
+  .two-panel-controls > label,
+  .two-panel-error {
+    grid-column: 1 / -1;
+  }
+
+  .two-panel-controls button {
+    min-width: 0;
+    min-height: 40px;
+    padding: 4px 7px;
   }
 
   .mosaic-editor {
