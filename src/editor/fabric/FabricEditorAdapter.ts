@@ -201,6 +201,11 @@ export class FabricEditorAdapter {
     this.applyViewport();
   }
 
+  panBy(deltaX: number, deltaY: number): void {
+    this.view = { ...this.view, panX: this.view.panX + deltaX, panY: this.view.panY + deltaY };
+    this.applyViewport();
+  }
+
   async loadBaseImage(asset: ProjectDocument["assets"]["baseImage"]): Promise<void> {
     if (!asset) return;
     const next: ProjectDocument = {

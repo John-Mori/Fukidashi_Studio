@@ -1,6 +1,7 @@
-import { Check, Droplets, Grid3X3, Redo2, RotateCcw, Trash2, Undo2, X } from "lucide-react";
+import { Check, Droplets, Grid3X3, Maximize2, Redo2, RotateCcw, Trash2, Undo2, X } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { mosaicSampleSize, shouldAppendMosaicPoint, type MosaicMode, type MosaicPoint, type MosaicStroke } from "../../editor/mosaic";
+import { clampGesturePan, createPinchSnapshot, updatePinchTransform, type GesturePoint, type GestureTransform, type PinchSnapshot } from "../../editor/touchGestures";
 
 type MosaicEditorProps = {
   sourceDataUrl: string;
@@ -64,8 +65,13 @@ function drawStrokeMask(context: CanvasRenderingContext2D, stroke: MosaicStroke)
 
 export function MosaicEditor({ sourceDataUrl, imageName, onCancel, onApply }: MosaicEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const activePointerRef = useRef<number | null>(null);
+  const pointersRef = useRef(new Map<number, GesturePoint>());
+  const pinchRef = useRef<PinchSnapshot | null>(null);
+  const suppressDrawingRef = useRef(false);
   const effectCacheRef = useRef(new Map<string, HTMLCanvasElement>());
   const [mode, setMode] = useState<MosaicMode>("pixelate");
   const [brushSize, setBrushSize] = useState(90);
@@ -74,6 +80,8 @@ export function MosaicEditor({ sourceDataUrl, imageName, onCancel, onApply }: Mo
   const [redoStrokes, setRedoStrokes] = useState<MosaicStroke[]>([]);
   const [ready, setReady] = useState(false);
   const [cursor, setCursor] = useState({ x: 0, y: 0, size: 0, visible: false });
+  const [view, setView] = useState<GestureTransform>({ scale: 1, x: 0, y: 0 });
+  const [displaySize, setDisplaySize] = useState({ width: 1, height: 1 });
 
   useEffect(() => {
     let cancelled = false;
@@ -87,6 +95,35 @@ export function MosaicEditor({ sourceDataUrl, imageName, onCancel, onApply }: Mo
     });
     return () => { cancelled = true; };
   }, [sourceDataUrl]);
+
+  useEffect(() => {
+    if (!ready || !stageRef.current || !canvasRef.current) return;
+    const stage = stageRef.current;
+    const canvas = canvasRef.current;
+    const updateDisplaySize = () => {
+      const rect = stage.getBoundingClientRect();
+      const style = getComputedStyle(stage);
+      const horizontalPadding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+      const verticalPadding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      const availableWidth = Math.max(1, rect.width - horizontalPadding);
+      const availableHeight = Math.max(1, rect.height - verticalPadding);
+      const fit = Math.min(1, availableWidth / canvas.width, availableHeight / canvas.height);
+      const nextSize = {
+        width: Math.max(1, canvas.width * fit),
+        height: Math.max(1, canvas.height * fit),
+      };
+      setDisplaySize(nextSize);
+      setView((current) => clampGesturePan(
+        current,
+        nextSize,
+        { width: availableWidth, height: availableHeight },
+      ));
+    };
+    updateDisplaySize();
+    const observer = new ResizeObserver(updateDisplaySize);
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, [ready]);
 
   useEffect(() => {
     if (!ready || !canvasRef.current || !imageRef.current) return;
@@ -133,18 +170,42 @@ export function MosaicEditor({ sourceDataUrl, imageName, onCancel, onApply }: Mo
 
   const updateCursor = (event: ReactPointerEvent<HTMLCanvasElement>, visible = true) => {
     const rect = event.currentTarget.getBoundingClientRect();
+    const localScaleX = event.currentTarget.offsetWidth / rect.width;
+    const localScaleY = event.currentTarget.offsetHeight / rect.height;
     setCursor({
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-      size: brushSize * rect.width / event.currentTarget.width,
+      x: (event.clientX - rect.left) * localScaleX,
+      y: (event.clientY - rect.top) * localScaleY,
+      size: brushSize * event.currentTarget.offsetWidth / event.currentTarget.width,
       visible,
     });
+  };
+
+  const pinchFromPointers = () => {
+    const [first, second] = Array.from(pointersRef.current.values());
+    return first && second ? createPinchSnapshot(first, second) : null;
   };
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (!ready) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
+    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    if (pointersRef.current.size >= 2) {
+      if (activePointerRef.current !== null) {
+        setStrokes((current) => {
+          const active = current[current.length - 1];
+          return active?.points.length === 1 ? current.slice(0, -1) : current;
+        });
+      }
+      activePointerRef.current = null;
+      suppressDrawingRef.current = true;
+      pinchRef.current = pinchFromPointers();
+      setCursor((current) => ({ ...current, visible: false }));
+      return;
+    }
+
+    if (suppressDrawingRef.current) return;
     activePointerRef.current = event.pointerId;
     const point = pointFromEvent(event);
     setRedoStrokes([]);
@@ -153,9 +214,34 @@ export function MosaicEditor({ sourceDataUrl, imageName, onCancel, onApply }: Mo
   };
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
-    updateCursor(event);
-    if (activePointerRef.current !== event.pointerId) return;
     event.preventDefault();
+    if (pointersRef.current.has(event.pointerId)) {
+      pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    }
+
+    if (pointersRef.current.size >= 2 && pinchRef.current && stageRef.current && wrapRef.current) {
+      const nextPinch = pinchFromPointers();
+      if (!nextPinch) return;
+      const previousPinch = pinchRef.current;
+      const stageRect = stageRef.current.getBoundingClientRect();
+      const viewportCenter = { x: stageRect.left + stageRect.width / 2, y: stageRect.top + stageRect.height / 2 };
+      const contentSize = { width: wrapRef.current.offsetWidth, height: wrapRef.current.offsetHeight };
+      const viewportSize = { width: stageRect.width, height: stageRect.height };
+      setView((current) => clampGesturePan(
+        updatePinchTransform(current, previousPinch, nextPinch, viewportCenter),
+        contentSize,
+        viewportSize,
+      ));
+      pinchRef.current = nextPinch;
+      setCursor((current) => ({ ...current, visible: false }));
+      return;
+    }
+
+    if (suppressDrawingRef.current || activePointerRef.current !== event.pointerId) {
+      updateCursor(event, false);
+      return;
+    }
+    updateCursor(event);
     const point = pointFromEvent(event);
     setStrokes((current) => {
       const active = current[current.length - 1];
@@ -167,12 +253,22 @@ export function MosaicEditor({ sourceDataUrl, imageName, onCancel, onApply }: Mo
   };
 
   const handlePointerUp = (event: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (activePointerRef.current !== event.pointerId) return;
-    activePointerRef.current = null;
+    pointersRef.current.delete(event.pointerId);
+    if (activePointerRef.current === event.pointerId) activePointerRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    updateCursor(event);
+    if (pointersRef.current.size >= 2) {
+      pinchRef.current = pinchFromPointers();
+    } else {
+      pinchRef.current = null;
+    }
+    if (pointersRef.current.size === 0) {
+      suppressDrawingRef.current = false;
+      updateCursor(event, event.pointerType === "mouse");
+    } else {
+      setCursor((current) => ({ ...current, visible: false }));
+    }
   };
 
   const handleUndo = () => {
@@ -213,8 +309,19 @@ export function MosaicEditor({ sourceDataUrl, imageName, onCancel, onApply }: Mo
         <button className="primary" title="適用" onClick={handleApply}><Check size={20} /><span>適用</span></button>
       </header>
 
-      <div className="mosaic-stage">
-        <div className="mosaic-canvas-wrap">
+      <div className="mosaic-stage" ref={stageRef}>
+        <button
+          type="button"
+          className="mosaic-view-reset"
+          title="全体表示へ戻す"
+          disabled={view.scale <= 1.0001}
+          onClick={() => setView({ scale: 1, x: 0, y: 0 })}
+        ><Maximize2 size={18} /><span>{Math.round(view.scale * 100)}%</span></button>
+        <div
+          className="mosaic-canvas-wrap"
+          ref={wrapRef}
+          style={{ width: displaySize.width, height: displaySize.height, transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}
+        >
           <canvas
             ref={canvasRef}
             onPointerDown={handlePointerDown}

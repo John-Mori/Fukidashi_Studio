@@ -1,5 +1,6 @@
 ﻿import { useEffect, useLayoutEffect, useRef } from "react";
 import { FabricEditorAdapter } from "../../editor/fabric/FabricEditorAdapter";
+import { createPinchSnapshot, type PinchSnapshot } from "../../editor/touchGestures";
 import type { EditorObject, ProjectDocument } from "../../project/model/types";
 
 type CanvasStageProps = {
@@ -38,8 +39,60 @@ export function CanvasStage({ project, activeTool, onReady, onCommit, onSelectio
     });
     observer.observe(containerRef.current);
 
+    const container = containerRef.current;
+    let pinch: PinchSnapshot | null = null;
+    let gestureActive = false;
+    const snapshotFromTouches = (touches: TouchList) => createPinchSnapshot(
+      { x: touches[0].clientX, y: touches[0].clientY },
+      { x: touches[1].clientX, y: touches[1].clientY },
+    );
+    const handleTouchStart = (event: TouchEvent) => {
+      if (event.touches.length < 2) return;
+      event.preventDefault();
+      event.stopPropagation();
+      gestureActive = true;
+      pinch = snapshotFromTouches(event.touches);
+    };
+    const handleTouchMove = (event: TouchEvent) => {
+      if (!gestureActive) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.touches.length < 2 || !pinch) return;
+      const next = snapshotFromTouches(event.touches);
+      const rect = container.getBoundingClientRect();
+      engine.zoomBy(next.distance / pinch.distance, {
+        x: pinch.midpoint.x - rect.left,
+        y: pinch.midpoint.y - rect.top,
+      });
+      engine.panBy(
+        next.midpoint.x - pinch.midpoint.x,
+        next.midpoint.y - pinch.midpoint.y,
+      );
+      pinch = next;
+    };
+    const handleTouchEnd = (event: TouchEvent) => {
+      if (!gestureActive) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.touches.length >= 2) {
+        pinch = snapshotFromTouches(event.touches);
+      } else {
+        pinch = null;
+        if (event.touches.length === 0) gestureActive = false;
+      }
+    };
+    const listenerOptions: AddEventListenerOptions = { passive: false, capture: true };
+    container.addEventListener("touchstart", handleTouchStart, listenerOptions);
+    container.addEventListener("touchmove", handleTouchMove, listenerOptions);
+    container.addEventListener("touchend", handleTouchEnd, listenerOptions);
+    container.addEventListener("touchcancel", handleTouchEnd, listenerOptions);
+
     return () => {
       observer.disconnect();
+      container.removeEventListener("touchstart", handleTouchStart, true);
+      container.removeEventListener("touchmove", handleTouchMove, true);
+      container.removeEventListener("touchend", handleTouchEnd, true);
+      container.removeEventListener("touchcancel", handleTouchEnd, true);
       engine.dispose();
       engineRef.current = null;
     };

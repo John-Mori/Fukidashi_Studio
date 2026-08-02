@@ -328,6 +328,11 @@ textarea {
   background-size: 28px 28px;
 }
 
+.canvas-shell canvas {
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
 .portrait-drop-guide {
   position: absolute;
   left: 50%;
@@ -537,10 +542,12 @@ textarea {
 }
 
 .mosaic-stage {
+  position: relative;
   min-height: 0;
   display: grid;
   place-items: center;
   overflow: hidden;
+  overscroll-behavior: none;
   padding: 16px;
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
@@ -552,19 +559,39 @@ textarea {
 .mosaic-canvas-wrap {
   position: relative;
   display: flex;
-  max-width: 100%;
-  max-height: 100%;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.42);
+  transform-origin: center center;
+  will-change: transform;
 }
 
 .mosaic-canvas-wrap canvas {
   display: block;
-  width: auto;
-  height: auto;
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
   touch-action: none;
   cursor: crosshair;
+}
+
+.mosaic-view-reset {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 4;
+  min-width: 68px;
+  height: 40px;
+  padding: 0 9px;
+  background: rgba(19, 23, 32, 0.94);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
+.mosaic-view-reset span {
+  min-width: 32px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.mosaic-view-reset:disabled {
+  opacity: 0.72;
 }
 
 .mosaic-brush-cursor {
@@ -1191,6 +1218,8 @@ textarea {
 
   .mosaic-editor {
     grid-template-rows: 54px minmax(0, 1fr) auto;
+    height: 100dvh;
+    max-height: 100dvh;
   }
 
   .mosaic-topbar {
@@ -1221,6 +1250,10 @@ textarea {
     gap: 9px;
     padding: 10px;
     padding-bottom: max(10px, env(safe-area-inset-bottom));
+    max-height: min(40dvh, 290px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
   }
 
   .mosaic-mode-switch,
@@ -1239,5 +1272,10 @@ textarea {
 
   .mosaic-gesture-hint {
     display: none;
+  }
+
+  .mosaic-view-reset {
+    top: 8px;
+    right: 8px;
   }
 }
