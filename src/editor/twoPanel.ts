@@ -29,6 +29,7 @@ export type BoundaryLine = {
   leftY: number;
   rightY: number;
   ratio: number;
+  anglePercent: number;
 };
 
 export type PanelGeometry = {
@@ -100,7 +101,7 @@ export function normalizeSubpanelRatios(count: SubpanelCount, values: number[]):
 export function createPanelLayout(
   panelCount: PanelCount,
   boundaryRatios: number[],
-  anglePercent: number,
+  anglePercents: number | number[],
   width = SHORTS_WIDTH,
   height = SHORTS_HEIGHT,
 ): PanelLayout {
@@ -108,17 +109,23 @@ export function createPanelLayout(
   const safeHeight = clampOutputSize(height, SHORTS_HEIGHT);
   const ratios = normalizeBoundaryRatios(panelCount, boundaryRatios);
   const panelShares = [ratios[0], ...ratios.slice(1).map((ratio, index) => ratio - ratios[index]), 1 - ratios[ratios.length - 1]];
-  const maxDeltaRatio = Math.min(0.25, Math.min(...panelShares) * 0.75);
-  const verticalDelta = safeHeight * maxDeltaRatio * clampAnglePercent(anglePercent) / 100;
-  const boundaries = ratios.map((ratio) => ({
-    ratio,
-    leftY: safeHeight * ratio - verticalDelta / 2,
-    rightY: safeHeight * ratio + verticalDelta / 2,
-  }));
+  const angles = Array.isArray(anglePercents)
+    ? ratios.map((_, index) => clampAnglePercent(anglePercents[index] ?? 0))
+    : ratios.map(() => clampAnglePercent(anglePercents));
+  const boundaries = ratios.map((ratio, index) => {
+    const maxDeltaRatio = Math.min(0.22, Math.min(panelShares[index], panelShares[index + 1]) * 0.65);
+    const verticalDelta = safeHeight * maxDeltaRatio * angles[index] / 100;
+    return {
+      ratio,
+      anglePercent: angles[index],
+      leftY: safeHeight * ratio - verticalDelta / 2,
+      rightY: safeHeight * ratio + verticalDelta / 2,
+    };
+  });
   const edges: BoundaryLine[] = [
-    { ratio: 0, leftY: 0, rightY: 0 },
+    { ratio: 0, anglePercent: 0, leftY: 0, rightY: 0 },
     ...boundaries,
-    { ratio: 1, leftY: safeHeight, rightY: safeHeight },
+    { ratio: 1, anglePercent: 0, leftY: safeHeight, rightY: safeHeight },
   ];
   const panels = Array.from({ length: panelCount }, (_, index): PanelGeometry => {
     const top = edges[index];
@@ -146,33 +153,53 @@ function interpolate(start: number, end: number, ratio: number): number {
   return start + (end - start) * ratio;
 }
 
-export function splitPanelGeometry(panel: PanelGeometry, count: SubpanelCount, ratios: number[]): PanelGeometry[] {
+function edgePoint(start: PanelPoint, end: PanelPoint, ratio: number): PanelPoint {
+  return {
+    x: interpolate(start.x, end.x, ratio),
+    y: interpolate(start.y, end.y, ratio),
+  };
+}
+
+export function splitPanelGeometry(
+  panel: PanelGeometry,
+  count: SubpanelCount,
+  ratios: number[],
+  anglePercents: number[] = [],
+): PanelGeometry[] {
   const normalized = normalizeSubpanelRatios(count, ratios);
-  const left = panel.polygon[0].x;
-  const right = panel.polygon[1].x;
-  const width = Math.max(1, right - left);
-  const positions = [0, ...normalized, 1];
+  const dividerRatios = normalized.map((ratio, index) => {
+    const shift = 0.05 * clampAnglePercent(anglePercents[index] ?? 0) / 100;
+    return {
+      top: ratio - shift,
+      bottom: ratio + shift,
+    };
+  });
+  const topPositions = [0, ...dividerRatios.map((divider) => divider.top), 1];
+  const bottomPositions = [0, ...dividerRatios.map((divider) => divider.bottom), 1];
+
   return Array.from({ length: count }, (_, index) => {
-    const startRatio = positions[index];
-    const endRatio = positions[index + 1];
-    const x1 = left + width * startRatio;
-    const x2 = left + width * endRatio;
-    const topLeft = interpolate(panel.polygon[0].y, panel.polygon[1].y, startRatio);
-    const topRight = interpolate(panel.polygon[0].y, panel.polygon[1].y, endRatio);
-    const bottomLeft = interpolate(panel.polygon[3].y, panel.polygon[2].y, startRatio);
-    const bottomRight = interpolate(panel.polygon[3].y, panel.polygon[2].y, endRatio);
-    const contentTop = Math.max(topLeft, topRight);
-    const contentBottom = Math.min(bottomLeft, bottomRight);
+    const topLeft = edgePoint(panel.polygon[0], panel.polygon[1], topPositions[index]);
+    const topRight = edgePoint(panel.polygon[0], panel.polygon[1], topPositions[index + 1]);
+    const bottomLeft = edgePoint(panel.polygon[3], panel.polygon[2], bottomPositions[index]);
+    const bottomRight = edgePoint(panel.polygon[3], panel.polygon[2], bottomPositions[index + 1]);
+    const minX = Math.min(topLeft.x, topRight.x, bottomLeft.x, bottomRight.x);
+    const maxX = Math.max(topLeft.x, topRight.x, bottomLeft.x, bottomRight.x);
+    const minY = Math.min(topLeft.y, topRight.y, bottomLeft.y, bottomRight.y);
+    const maxY = Math.max(topLeft.y, topRight.y, bottomLeft.y, bottomRight.y);
+    const contentLeft = Math.max(topLeft.x, bottomLeft.x);
+    const contentRight = Math.min(topRight.x, bottomRight.x);
+    const contentTop = Math.max(topLeft.y, topRight.y);
+    const contentBottom = Math.min(bottomLeft.y, bottomRight.y);
     return {
       index,
-      polygon: [
-        { x: x1, y: topLeft },
-        { x: x2, y: topRight },
-        { x: x2, y: bottomRight },
-        { x: x1, y: bottomLeft },
-      ],
-      bounds: { x: x1, y: Math.min(topLeft, topRight), width: x2 - x1, height: Math.max(1, Math.max(bottomLeft, bottomRight) - Math.min(topLeft, topRight)) },
-      contentRect: { x: x1, y: contentTop, width: x2 - x1, height: Math.max(1, contentBottom - contentTop) },
+      polygon: [topLeft, topRight, bottomRight, bottomLeft],
+      bounds: { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) },
+      contentRect: {
+        x: contentLeft,
+        y: contentTop,
+        width: Math.max(1, contentRight - contentLeft),
+        height: Math.max(1, contentBottom - contentTop),
+      },
     };
   });
 }
@@ -194,6 +221,32 @@ export function subpanelIndexAtX(panel: PanelGeometry, count: SubpanelCount, rat
     if (ratio < normalized[index]) return index;
   }
   return count - 1;
+}
+
+function pointInPolygon(polygon: PanelPoint[], x: number, y: number): boolean {
+  let inside = false;
+  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
+    const currentPoint = polygon[index];
+    const previousPoint = polygon[previous];
+    const crosses = (currentPoint.y > y) !== (previousPoint.y > y)
+      && x < (previousPoint.x - currentPoint.x) * (y - currentPoint.y) / (previousPoint.y - currentPoint.y || 1) + currentPoint.x;
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
+export function subpanelIndexAtPoint(
+  panel: PanelGeometry,
+  count: SubpanelCount,
+  ratios: number[],
+  anglePercents: number[],
+  x: number,
+  y: number,
+): number {
+  const cells = splitPanelGeometry(panel, count, ratios, anglePercents);
+  const match = cells.find((cell) => pointInPolygon(cell.polygon, x, y));
+  if (match) return match.index;
+  return subpanelIndexAtX(panel, count, ratios, x);
 }
 
 export function imagePlacement(

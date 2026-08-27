@@ -1,4 +1,4 @@
-import { ArrowUpDown, Check, ImagePlus, Move, PanelsTopLeft, Pipette, RotateCcw, Trash2, X } from "lucide-react";
+import { ArrowUpDown, CornerDownLeft, ImagePlus, Move, PanelsTopLeft, Pipette, RotateCcw, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { createColorPatch, rgbToHex, transformColorPatch, type ColorPatch, type PatchTransform } from "../../editor/colorPatch";
 import { createPinchSnapshot, type PinchSnapshot } from "../../editor/touchGestures";
@@ -16,7 +16,7 @@ import {
   SHORTS_HEIGHT,
   SHORTS_WIDTH,
   splitPanelGeometry,
-  subpanelIndexAtX,
+  subpanelIndexAtPoint,
   type PanelCount,
   type PanelCrop,
   type PanelFit,
@@ -31,15 +31,16 @@ type PanelImage = {
 };
 
 type TwoPanelComposerProps = {
+  open: boolean;
   initialImage?: { name: string; dataUrl: string };
   onCancel: () => void;
   onApply: (dataUrl: string, size: { width: number; height: number }, panelCount: PanelCount) => void;
 };
 
-type AngleSettings = Record<PanelCount, number>;
-type RememberSettings = Record<PanelCount, boolean>;
-type StoredAngleDefaults = Partial<Record<"2" | "3", number>>;
+type AngleSettings = Record<PanelCount, number[]>;
+type StoredAngleDefaults = Record<string, number>;
 type SplitRatioSettings = Array<Record<SubpanelCount, number[]>>;
+type SplitAngleSettings = Array<Record<SubpanelCount, number[]>>;
 type CellMatrix<T> = T[][];
 type ComposerTool = "image" | "eyedropper";
 
@@ -67,6 +68,13 @@ type PatchGesture = {
 
 const ANGLE_DEFAULTS_KEY = "fukidashi-studio-panel-angle-defaults";
 const ZONE_LABELS = ["上", "中央", "下"];
+const ZONE_COLORS = ["#3b82f6", "#20b486", "#f59e42"];
+const CELL_COLORS = [
+  ["#3b82f6", "#18a8d8", "#6366f1"],
+  ["#20b486", "#0f9f98", "#78b83e"],
+  ["#f59e42", "#ed6f8b", "#d9a51d"],
+];
+const HORIZONTAL_BOUNDARY_COLORS = ["#a78bfa", "#f472b6"];
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -114,28 +122,75 @@ function createSplitRatioSettings(): SplitRatioSettings {
   }));
 }
 
+function horizontalAngleKey(panelCount: PanelCount, index: number): string {
+  return "horizontal-" + panelCount + "-" + index;
+}
+
+function verticalAngleKey(zone: number, count: SubpanelCount, index: number): string {
+  return "vertical-" + zone + "-" + count + "-" + index;
+}
+
+function createSplitAngleSettings(stored: StoredAngleDefaults): SplitAngleSettings {
+  return Array.from({ length: 3 }, (_, zone) => ({
+    1: [],
+    2: [stored[verticalAngleKey(zone, 2, 0)] ?? 0],
+    3: [
+      stored[verticalAngleKey(zone, 3, 0)] ?? 0,
+      stored[verticalAngleKey(zone, 3, 1)] ?? 0,
+    ],
+  }));
+}
+
 function readAngleDefaults(): StoredAngleDefaults {
   try {
-    const parsed = JSON.parse(localStorage.getItem(ANGLE_DEFAULTS_KEY) ?? "{}") as StoredAngleDefaults;
-    return {
-      ...(typeof parsed["2"] === "number" ? { "2": clampAnglePercent(parsed["2"]) } : {}),
-      ...(typeof parsed["3"] === "number" ? { "3": clampAnglePercent(parsed["3"]) } : {}),
-    };
+    const parsed = JSON.parse(localStorage.getItem(ANGLE_DEFAULTS_KEY) ?? "{}") as Record<string, unknown>;
+    const stored: StoredAngleDefaults = {};
+    Object.entries(parsed).forEach(([key, value]) => {
+      if ((key.startsWith("horizontal-") || key.startsWith("vertical-")) && typeof value === "number") {
+        stored[key] = clampAnglePercent(value);
+      }
+    });
+    if (typeof parsed["2"] === "number") stored[horizontalAngleKey(2, 0)] = clampAnglePercent(parsed["2"]);
+    if (typeof parsed["3"] === "number") {
+      stored[horizontalAngleKey(3, 0)] = clampAnglePercent(parsed["3"]);
+      stored[horizontalAngleKey(3, 1)] = clampAnglePercent(parsed["3"]);
+    }
+    return stored;
   } catch {
     return {};
   }
 }
 
-function writeAngleDefault(panelCount: PanelCount, value?: number) {
+function writeAngleDefault(target: string, value?: number) {
   const stored = readAngleDefaults();
-  const key = String(panelCount) as "2" | "3";
-  if (typeof value === "number") stored[key] = clampAnglePercent(value);
-  else delete stored[key];
+  if (typeof value === "number") stored[target] = clampAnglePercent(value);
+  else delete stored[target];
   try {
     localStorage.setItem(ANGLE_DEFAULTS_KEY, JSON.stringify(stored));
   } catch {
     // Editing remains available when private browsing blocks persistent storage.
   }
+}
+
+function zoneColorIndex(index: number, panelCount: PanelCount): number {
+  return panelCount === 2 && index === 1 ? 2 : index;
+}
+
+function zoneColor(index: number, panelCount: PanelCount): string {
+  return ZONE_COLORS[zoneColorIndex(index, panelCount)];
+}
+
+function cellColor(zone: number, cell: number, panelCount: PanelCount): string {
+  return CELL_COLORS[zoneColorIndex(zone, panelCount)][cell];
+}
+
+function horizontalBoundaryLabel(panelCount: PanelCount, index: number): string {
+  if (panelCount === 2) return "上段 / 下段";
+  return index === 0 ? "上段 / 中央段" : "中央段 / 下段";
+}
+
+function verticalBoundaryLabel(index: number): string {
+  return "コマ" + (index + 1) + " / コマ" + (index + 2);
 }
 
 function zoneLabel(index: number, panelCount: PanelCount) {
@@ -184,7 +239,7 @@ function PatchDimensionField({ label, value, max, onChange }: { label: string; v
   );
 }
 
-export function TwoPanelComposer({ initialImage, onCancel, onApply }: TwoPanelComposerProps) {
+export function TwoPanelComposer({ open, initialImage, onCancel, onApply }: TwoPanelComposerProps) {
   const storedDefaultsRef = useRef(readAngleDefaults());
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
@@ -198,6 +253,7 @@ export function TwoPanelComposer({ initialImage, onCancel, onApply }: TwoPanelCo
   const [panelCount, setPanelCount] = useState<PanelCount>(2);
   const [zoneSplits, setZoneSplits] = useState<SubpanelCount[]>([1, 1, 1]);
   const [splitRatios, setSplitRatios] = useState<SplitRatioSettings>(createSplitRatioSettings);
+  const [splitAngles, setSplitAngles] = useState<SplitAngleSettings>(() => createSplitAngleSettings(storedDefaultsRef.current));
   const [images, setImages] = useState<CellMatrix<PanelImage | undefined>>(() => createMatrix(() => undefined));
   const [crops, setCrops] = useState<CellMatrix<PanelCrop>>(() => createMatrix(() => ({ ...DEFAULT_PANEL_CROP })));
   const [fits, setFits] = useState<CellMatrix<PanelFit>>(() => createMatrix(() => "contain"));
@@ -208,13 +264,16 @@ export function TwoPanelComposer({ initialImage, onCancel, onApply }: TwoPanelCo
     3: [...DEFAULT_BOUNDARY_RATIOS[3]],
   });
   const [angles, setAngles] = useState<AngleSettings>({
-    2: storedDefaultsRef.current["2"] ?? 0,
-    3: storedDefaultsRef.current["3"] ?? 0,
+    2: [storedDefaultsRef.current[horizontalAngleKey(2, 0)] ?? 0],
+    3: [
+      storedDefaultsRef.current[horizontalAngleKey(3, 0)] ?? 0,
+      storedDefaultsRef.current[horizontalAngleKey(3, 1)] ?? 0,
+    ],
   });
-  const [rememberAngles, setRememberAngles] = useState<RememberSettings>({
-    2: typeof storedDefaultsRef.current["2"] === "number",
-    3: typeof storedDefaultsRef.current["3"] === "number",
-  });
+  const [rememberedAngles, setRememberedAngles] = useState<Set<string>>(
+    () => new Set(Object.keys(storedDefaultsRef.current)),
+  );
+  const [activeAngleTarget, setActiveAngleTarget] = useState(horizontalAngleKey(2, 0));
   const [outputWidth, setOutputWidth] = useState(SHORTS_WIDTH);
   const [outputHeight, setOutputHeight] = useState(SHORTS_HEIGHT);
   const [patches, setPatches] = useState<ColorPatch[]>([]);
@@ -228,8 +287,13 @@ export function TwoPanelComposer({ initialImage, onCancel, onApply }: TwoPanelCo
     [panelCount, boundaryRatios, angles, outputWidth, outputHeight],
   );
   const zoneCells = useMemo(
-    () => layout.panels.map((zone, index) => splitPanelGeometry(zone, zoneSplits[index], splitRatios[index][zoneSplits[index]])),
-    [layout, zoneSplits, splitRatios],
+    () => layout.panels.map((zone, index) => splitPanelGeometry(
+      zone,
+      zoneSplits[index],
+      splitRatios[index][zoneSplits[index]],
+      splitAngles[index][zoneSplits[index]],
+    )),
+    [layout, zoneSplits, splitRatios, splitAngles],
   );
   const activeGeometry = zoneCells[activeZone]?.[activeCell] ?? zoneCells[0][0];
   const activeCrop = crops[activeZone][activeCell];
@@ -260,7 +324,7 @@ export function TwoPanelComposer({ initialImage, onCancel, onApply }: TwoPanelCo
       const styles = window.getComputedStyle(stage);
       const horizontalPadding = Number.parseFloat(styles.paddingLeft) + Number.parseFloat(styles.paddingRight);
       const verticalPadding = Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom);
-      const availableWidth = Math.max(1, stage.clientWidth - horizontalPadding - 58);
+      const availableWidth = Math.max(1, stage.clientWidth - horizontalPadding - 48);
       const availableHeight = Math.max(1, stage.clientHeight - verticalPadding);
       const width = Math.min(availableWidth, availableHeight * layout.width / layout.height);
       setPreviewStyle({ width: `${width}px`, height: `${width * layout.height / layout.width}px` });
@@ -322,6 +386,7 @@ export function TwoPanelComposer({ initialImage, onCancel, onApply }: TwoPanelCo
   }, [layout.width, layout.height]);
 
   useEffect(() => {
+    if (!open) return;
     const handlePaste = (event: ClipboardEvent) => {
       const item = Array.from(event.clipboardData?.items ?? []).find((candidate) => candidate.type.startsWith("image/"));
       const file = item?.getAsFile();
@@ -340,7 +405,7 @@ export function TwoPanelComposer({ initialImage, onCancel, onApply }: TwoPanelCo
     };
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, [activeZone, activeCell]);
+  }, [open, activeZone, activeCell]);
 
   const openImagePicker = (zone: number, cell: number) => {
     pendingCellRef.current = { zone, cell };
@@ -414,7 +479,14 @@ export function TwoPanelComposer({ initialImage, onCancel, onApply }: TwoPanelCo
     }
     setSelectedPatchId(undefined);
     const zone = panelIndexAtPoint(layout, point.x, point.y);
-    const cell = subpanelIndexAtX(layout.panels[zone], zoneSplits[zone], splitRatios[zone][zoneSplits[zone]], point.x);
+    const cell = subpanelIndexAtPoint(
+      layout.panels[zone],
+      zoneSplits[zone],
+      splitRatios[zone][zoneSplits[zone]],
+      splitAngles[zone][zoneSplits[zone]],
+      point.x,
+      point.y,
+    );
     setActiveZone(zone);
     setActiveCell(cell);
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -526,6 +598,7 @@ export function TwoPanelComposer({ initialImage, onCancel, onApply }: TwoPanelCo
     setFits(reverseHead);
     setZoneSplits(reverseHead);
     setSplitRatios(reverseHead);
+    setSplitAngles(reverseHead);
     setActiveZone(panelCount - 1 - activeZone);
     setActiveCell(0);
   };
@@ -533,6 +606,7 @@ export function TwoPanelComposer({ initialImage, onCancel, onApply }: TwoPanelCo
   const setZoneSplit = (count: SubpanelCount) => {
     setZoneSplits((current) => current.map((value, index) => index === activeZone ? count : value));
     setActiveCell((current) => Math.min(current, count - 1));
+    if (count > 1) setActiveAngleTarget(verticalAngleKey(activeZone, count, 0));
   };
 
   const setSubBoundary = (index: number, value: number) => {
@@ -551,15 +625,40 @@ export function TwoPanelComposer({ initialImage, onCancel, onApply }: TwoPanelCo
     });
   };
 
-  const setAngle = (value: number) => {
+  const setHorizontalAngle = (index: number, value: number) => {
     const next = clampAnglePercent(value);
-    setAngles((current) => ({ ...current, [panelCount]: next }));
-    if (rememberAngles[panelCount]) writeAngleDefault(panelCount, next);
+    const target = horizontalAngleKey(panelCount, index);
+    setAngles((current) => ({
+      ...current,
+      [panelCount]: current[panelCount].map((angle, angleIndex) => angleIndex === index ? next : angle),
+    }));
+    setActiveAngleTarget(target);
+    if (rememberedAngles.has(target)) writeAngleDefault(target, next);
   };
 
-  const setRememberAngle = (checked: boolean) => {
-    setRememberAngles((current) => ({ ...current, [panelCount]: checked }));
-    writeAngleDefault(panelCount, checked ? angles[panelCount] : undefined);
+  const setVerticalAngle = (index: number, value: number) => {
+    const count = zoneSplits[activeZone];
+    const next = clampAnglePercent(value);
+    const target = verticalAngleKey(activeZone, count, index);
+    setSplitAngles((current) => current.map((setting, zone) => {
+      if (zone !== activeZone) return setting;
+      return {
+        ...setting,
+        [count]: setting[count].map((angle, angleIndex) => angleIndex === index ? next : angle),
+      };
+    }));
+    setActiveAngleTarget(target);
+    if (rememberedAngles.has(target)) writeAngleDefault(target, next);
+  };
+
+  const setRememberAngle = (target: string, checked: boolean, value: number) => {
+    setRememberedAngles((current) => {
+      const next = new Set(current);
+      if (checked) next.add(target);
+      else next.delete(target);
+      return next;
+    });
+    writeAngleDefault(target, checked ? value : undefined);
   };
 
   const apply = () => {
@@ -576,14 +675,14 @@ export function TwoPanelComposer({ initialImage, onCancel, onApply }: TwoPanelCo
   };
 
   return (
-    <section className="two-panel-editor" aria-label="2・3コマ結合">
+    <section className="two-panel-editor" aria-label="2・3コマ結合" hidden={!open}>
       <input ref={inputRef} hidden type="file" accept="image/*" onChange={(event) => { void setImageFromFiles(event.target.files); event.target.value = ""; }} />
 
       <header className="two-panel-topbar">
         <button title="キャンセル" onClick={onCancel}><X size={20} /><span>キャンセル</span></button>
         <div><strong>{panelCount}段コマ結合</strong><span>{layout.width} x {layout.height}px</span></div>
         <button title="段の上下を入れ替え" disabled={!images.slice(0, panelCount).flat().some(Boolean)} onClick={reverseZones}><ArrowUpDown size={20} /></button>
-        <button className="primary" title="結合して編集" disabled={!allImagesReady} onClick={apply}><Check size={20} /><span>結合して編集</span></button>
+        <button className="primary" title="編集画面へ反映" disabled={!allImagesReady} onClick={apply}><CornerDownLeft size={20} /><span>編集画面へ反映</span></button>
       </header>
 
       <div ref={stageRef} className="two-panel-stage">
@@ -591,12 +690,28 @@ export function TwoPanelComposer({ initialImage, onCancel, onApply }: TwoPanelCo
           <div ref={previewRef} className="two-panel-preview" style={previewStyle}>
             <canvas ref={canvasRef} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp} />
             <svg className="two-panel-overlay" viewBox={`0 0 ${layout.width} ${layout.height}`} aria-hidden="true">
-              {!selectedPatch && <polygon className="two-panel-selection" points={activePolygon} />}
+              {!selectedPatch && <polygon className="two-panel-selection" points={activePolygon} style={{ stroke: cellColor(activeZone, activeCell, panelCount) }} />}
               {layout.boundaries.map((boundary, index) => (
-                <line key={`row-${index}`} className="two-panel-seam" x1="0" y1={boundary.leftY} x2={layout.width} y2={boundary.rightY} />
+                <line
+                  key={`row-${index}`}
+                  className={`two-panel-seam${activeAngleTarget === horizontalAngleKey(panelCount, index) ? " active" : ""}`}
+                  style={{ stroke: HORIZONTAL_BOUNDARY_COLORS[index] }}
+                  x1="0"
+                  y1={boundary.leftY}
+                  x2={layout.width}
+                  y2={boundary.rightY}
+                />
               ))}
               {zoneCells.flatMap((cells, zone) => cells.slice(0, -1).map((cell, index) => (
-                <line key={`cell-${zone}-${index}`} className="two-panel-sub-seam" x1={cell.polygon[1].x} y1={cell.polygon[1].y} x2={cell.polygon[2].x} y2={cell.polygon[2].y} />
+                <line
+                  key={`cell-${zone}-${index}`}
+                  className={`two-panel-sub-seam${activeAngleTarget === verticalAngleKey(zone, zoneSplits[zone], index) ? " active" : ""}`}
+                  style={{ stroke: cellColor(zone, index + 1, panelCount) }}
+                  x1={cell.polygon[1].x}
+                  y1={cell.polygon[1].y}
+                  x2={cell.polygon[2].x}
+                  y2={cell.polygon[2].y}
+                />
               )))}
               {selectedPatch && (
                 <g className="color-patch-selection">
@@ -618,6 +733,8 @@ export function TwoPanelComposer({ initialImage, onCancel, onApply }: TwoPanelCo
                   left: `${(cell.contentRect.x + cell.contentRect.width / 2) / layout.width * 100}%`,
                   top: `${(cell.contentRect.y + cell.contentRect.height / 2) / layout.height * 100}%`,
                   width: `${Math.max(11, Math.min(zoneSplits[zone] === 3 ? 18 : 28, cell.contentRect.width / layout.width * 100 - 2))}%`,
+                  borderColor: cellColor(zone, index, panelCount),
+                  color: cellColor(zone, index, panelCount),
                 }}
                 aria-label={`${zoneLabel(zone, panelCount)}${zoneSplits[zone] > 1 ? index + 1 : ""}の画像を選ぶ`}
                 title="画像を選ぶ"
@@ -633,7 +750,10 @@ export function TwoPanelComposer({ initialImage, onCancel, onApply }: TwoPanelCo
               <button
                 key={index}
                 className={activeZone === index ? "active" : ""}
-                style={{ top: `${(zone.contentRect.y + zone.contentRect.height / 2) / layout.height * 100}%` }}
+                style={{
+                  top: `${(zone.contentRect.y + zone.contentRect.height / 2) / layout.height * 100}%`,
+                  "--zone-color": zoneColor(index, panelCount),
+                } as CSSProperties}
                 title={`${zoneLabel(index, panelCount)}の段`}
                 onClick={() => { setActiveZone(index); setActiveCell(0); setSelectedPatchId(undefined); }}
               >
@@ -646,11 +766,11 @@ export function TwoPanelComposer({ initialImage, onCancel, onApply }: TwoPanelCo
 
       <footer className="two-panel-controls">
         <div className="two-panel-count-switch" aria-label="段数">
-          <button className={panelCount === 2 ? "active" : ""} onClick={() => { setPanelCount(2); setActiveZone((current) => Math.min(current, 1)); setActiveCell(0); }}>2段</button>
-          <button className={panelCount === 3 ? "active" : ""} onClick={() => setPanelCount(3)}>3段</button>
+          <button className={panelCount === 2 ? "active" : ""} onClick={() => { setPanelCount(2); setActiveZone((current) => Math.min(current, 1)); setActiveCell(0); setActiveAngleTarget(horizontalAngleKey(2, 0)); }}>2段</button>
+          <button className={panelCount === 3 ? "active" : ""} onClick={() => { setPanelCount(3); setActiveAngleTarget(horizontalAngleKey(3, 0)); }}>3段</button>
         </div>
 
-        <div className="two-panel-split-switch" aria-label="段内の分割数">
+        <div className="two-panel-split-switch" aria-label="段内の分割数" style={{ "--zone-color": zoneColor(activeZone, panelCount) } as CSSProperties}>
           {[1, 2, 3].map((value) => (
             <button key={value} className={zoneSplits[activeZone] === value ? "active" : ""} onClick={() => setZoneSplit(value as SubpanelCount)}>{value}コマ</button>
           ))}
@@ -658,7 +778,12 @@ export function TwoPanelComposer({ initialImage, onCancel, onApply }: TwoPanelCo
 
         <div className="two-panel-cell-tabs" aria-label="調整する小コマ" style={{ gridTemplateColumns: `repeat(${zoneSplits[activeZone]}, minmax(0, 1fr))` }}>
           {zoneCells[activeZone].map((_, index) => (
-            <button key={index} className={activeCell === index && !selectedPatch ? "active" : ""} onClick={() => { setActiveCell(index); setSelectedPatchId(undefined); }}>
+            <button
+              key={index}
+              className={activeCell === index && !selectedPatch ? "active" : ""}
+              style={{ "--cell-color": cellColor(activeZone, index, panelCount) } as CSSProperties}
+              onClick={() => { setActiveCell(index); setSelectedPatchId(undefined); }}
+            >
               コマ{index + 1}
             </button>
           ))}
@@ -705,10 +830,37 @@ export function TwoPanelComposer({ initialImage, onCancel, onApply }: TwoPanelCo
           </label>
         ))}
 
-        <div className="two-panel-angle-field">
-          <span>段境界の傾き <b>{angles[panelCount]}%</b></span>
-          <label className="two-panel-remember-angle"><input type="checkbox" checked={rememberAngles[panelCount]} onChange={(event) => setRememberAngle(event.target.checked)} />既定にする</label>
-          <input type="range" min="-100" max="100" step="1" value={angles[panelCount]} onChange={(event) => setAngle(Number(event.target.value))} />
+        <div className="two-panel-angle-controls">
+          <strong className="two-panel-angle-section-title">横境界（段）</strong>
+          {angles[panelCount].map((angle, index) => {
+            const target = horizontalAngleKey(panelCount, index);
+            const color = HORIZONTAL_BOUNDARY_COLORS[index];
+            return (
+              <div key={target} className={`two-panel-angle-control${activeAngleTarget === target ? " active" : ""}`} style={{ "--boundary-color": color } as CSSProperties}>
+                <span className="two-panel-angle-label"><i />{horizontalBoundaryLabel(panelCount, index)} <b>{angle}%</b></span>
+                <label className="two-panel-remember-angle"><input type="checkbox" checked={rememberedAngles.has(target)} onChange={(event) => setRememberAngle(target, event.target.checked, angle)} />既定にする</label>
+                <input aria-label={`${horizontalBoundaryLabel(panelCount, index)}の傾き`} type="range" min="-100" max="100" step="1" value={angle} onPointerDown={() => setActiveAngleTarget(target)} onFocus={() => setActiveAngleTarget(target)} onChange={(event) => setHorizontalAngle(index, Number(event.target.value))} />
+              </div>
+            );
+          })}
+
+          {zoneSplits[activeZone] > 1 && (
+            <>
+              <strong className="two-panel-angle-section-title">縦境界（{zoneLabel(activeZone, panelCount)}段）</strong>
+              {splitAngles[activeZone][zoneSplits[activeZone]].map((angle, index) => {
+                const count = zoneSplits[activeZone];
+                const target = verticalAngleKey(activeZone, count, index);
+                const color = cellColor(activeZone, index + 1, panelCount);
+                return (
+                  <div key={target} className={`two-panel-angle-control${activeAngleTarget === target ? " active" : ""}`} style={{ "--boundary-color": color } as CSSProperties}>
+                    <span className="two-panel-angle-label"><i />{verticalBoundaryLabel(index)} <b>{angle}%</b></span>
+                    <label className="two-panel-remember-angle"><input type="checkbox" checked={rememberedAngles.has(target)} onChange={(event) => setRememberAngle(target, event.target.checked, angle)} />既定にする</label>
+                    <input aria-label={`${zoneLabel(activeZone, panelCount)}段 ${verticalBoundaryLabel(index)}の傾き`} type="range" min="-100" max="100" step="1" value={angle} onPointerDown={() => setActiveAngleTarget(target)} onFocus={() => setActiveAngleTarget(target)} onChange={(event) => setVerticalAngle(index, Number(event.target.value))} />
+                  </div>
+                );
+              })}
+            </>
+          )}
         </div>
 
         <label className="two-panel-range-field two-panel-zoom-field">

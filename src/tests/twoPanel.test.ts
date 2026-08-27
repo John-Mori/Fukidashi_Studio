@@ -6,6 +6,7 @@ import {
   imagePlacement,
   panelIndexAtPoint,
   splitPanelGeometry,
+  subpanelIndexAtPoint,
   subpanelIndexAtX,
 } from "../editor/twoPanel";
 
@@ -25,12 +26,14 @@ describe("multi panel composer", () => {
     expect(layout.panels[1].polygon[2].y).toBe(layout.panels[2].polygon[1].y);
   });
 
-  it("uses parallel diagonal boundaries and keeps three panels selectable", () => {
-    const layout = createPanelLayout(3, [0.34, 0.67], 60);
+  it("angles each horizontal boundary independently and keeps panels selectable", () => {
+    const layout = createPanelLayout(3, [0.34, 0.67], [60, -35]);
     const firstDelta = layout.boundaries[0].rightY - layout.boundaries[0].leftY;
     const secondDelta = layout.boundaries[1].rightY - layout.boundaries[1].leftY;
     expect(firstDelta).toBeGreaterThan(0);
-    expect(secondDelta).toBeCloseTo(firstDelta);
+    expect(secondDelta).toBeLessThan(0);
+    expect(layout.boundaries[0].anglePercent).toBe(60);
+    expect(layout.boundaries[1].anglePercent).toBe(-35);
     expect(panelIndexAtPoint(layout, 0, 100)).toBe(0);
     expect(panelIndexAtPoint(layout, 540, 960)).toBe(1);
     expect(panelIndexAtPoint(layout, 1080, 1800)).toBe(2);
@@ -53,6 +56,19 @@ describe("multi panel composer", () => {
     expect(subpanelIndexAtX(zone, 3, [0.28, 0.74], 200)).toBe(0);
     expect(subpanelIndexAtX(zone, 3, [0.28, 0.74], 500)).toBe(1);
     expect(subpanelIndexAtX(zone, 3, [0.28, 0.74], 1000)).toBe(2);
+  });
+
+  it("angles each vertical divider independently and selects the slanted cells", () => {
+    const zone = createPanelLayout(2, [0.55], [45]).panels[0];
+    const cells = splitPanelGeometry(zone, 3, [0.32, 0.7], [100, -60]);
+    expect(cells[0].polygon[1]).toEqual(cells[1].polygon[0]);
+    expect(cells[1].polygon[1]).toEqual(cells[2].polygon[0]);
+    expect(cells[0].polygon[1].x).not.toBe(cells[0].polygon[2].x);
+    expect(cells[1].polygon[1].x).not.toBe(cells[1].polygon[2].x);
+    const firstCenter = cells[0].contentRect;
+    const thirdCenter = cells[2].contentRect;
+    expect(subpanelIndexAtPoint(zone, 3, [0.32, 0.7], [100, -60], firstCenter.x + firstCenter.width / 2, firstCenter.y + firstCenter.height / 2)).toBe(0);
+    expect(subpanelIndexAtPoint(zone, 3, [0.32, 0.7], [100, -60], thirdCenter.x + thirdCenter.width / 2, thirdCenter.y + thirdCenter.height / 2)).toBe(2);
   });
 
   it("contain mode keeps the entire image inside the diagonal panel", () => {

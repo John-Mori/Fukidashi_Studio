@@ -12,6 +12,7 @@ import { HeaderToolbar } from "../components/toolbar/HeaderToolbar";
 import type { FabricEditorAdapter } from "../editor/fabric/FabricEditorAdapter";
 import { clearAutosave, loadAutosave, saveAutosave } from "../project/autosave/autosave";
 import { createEmptyProject, createId, nowIso } from "../project/model/defaults";
+import { resizeCanvasObjects } from "../project/model/resizeCanvasObjects";
 import { createFrameTextLayout, createFrameTextPatch, findPairedFrameText, isTextFrameObject, objectDisplayCenter, objectDisplaySize, type TextFrameObject } from "../project/model/frameText";
 import type { BaseImageAsset, BubbleObject, EditorObject, ProjectDocument, ShapeKind, TemplateAsset, TextObject } from "../project/model/types";
 import { readFileAsDataUrl, loadImageSize, downloadDataUrl, saveImageDataUrl } from "../platform/browser/fileHelpers";
@@ -20,6 +21,9 @@ import { getSelectedType, useProjectStore } from "../store/projectStore";
 import "../styles/global.css";
 
 type MobilePanel = "canvas" | "add" | "adjust";
+type TwoPanelSession = {
+  initialImage?: { name: string; dataUrl: string };
+};
 
 const SUPPORTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/heic", "image/heif"]);
 const HIGH_QUALITY_EXPORT_SCALE = 2;
@@ -81,6 +85,7 @@ export function App() {
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>("canvas");
   const [mosaicOpen, setMosaicOpen] = useState(false);
   const [twoPanelOpen, setTwoPanelOpen] = useState(false);
+  const [twoPanelSession, setTwoPanelSession] = useState<TwoPanelSession>();
 
   const project = useProjectStore((state) => state.project);
   const past = useProjectStore((state) => state.past);
@@ -181,6 +186,8 @@ export function App() {
       next.assets = { baseImage, templates: project.assets.templates };
       next.settings.layout.previewPosition = project.settings.layout.previewPosition;
       await restoreProject(next, true, true);
+      setTwoPanelSession(undefined);
+      setTwoPanelOpen(false);
       setMobilePanel("canvas");
       pushToast(`画像を開きました: ${size.width} x ${size.height}px`, "success");
     } catch {
@@ -257,6 +264,8 @@ export function App() {
         throw new Error("invalid project");
       }
       await restoreProject(loaded, true, true);
+      setTwoPanelSession(undefined);
+      setTwoPanelOpen(false);
       pushToast("プロジェクトJSONを開きました。", "success");
     } catch {
       pushToast("プロジェクトJSONを読み込めませんでした。", "error");
@@ -372,6 +381,15 @@ export function App() {
     pushToast("モザイク加工を元画像へ適用しました。元に戻すこともできます。", "success");
   };
 
+  const handleOpenTwoPanel = () => {
+    setTwoPanelSession((current) => current ?? {
+      initialImage: project.assets.baseImage
+        ? { name: project.assets.baseImage.name, dataUrl: project.assets.baseImage.dataUrl }
+        : undefined,
+    });
+    setTwoPanelOpen(true);
+  };
+
   const handleApplyTwoPanel = async (dataUrl: string, size: { width: number; height: number }, panelCount: 2 | 3) => {
     const baseImage: BaseImageAsset = {
       id: createId("base"),
@@ -382,15 +400,26 @@ export function App() {
       dataUrl,
       createdAt: nowIso(),
     };
-    const next = createEmptyProject(size);
-    next.name = `YouTube Shorts ${panelCount}段コマ`;
-    next.canvas.backgroundAssetId = baseImage.id;
-    next.assets = { baseImage, templates: project.assets.templates };
-    next.settings.layout.previewPosition = project.settings.layout.previewPosition;
+    const next: ProjectDocument = {
+      ...project,
+      name: `YouTube Shorts ${panelCount}段コマ`,
+      updatedAt: nowIso(),
+      canvas: {
+        ...project.canvas,
+        width: size.width,
+        height: size.height,
+        backgroundAssetId: baseImage.id,
+      },
+      assets: {
+        ...project.assets,
+        baseImage,
+      },
+      objects: resizeCanvasObjects(project.objects, project.canvas, size),
+    };
     await restoreProject(next, true, true);
     setTwoPanelOpen(false);
     setMobilePanel("canvas");
-    pushToast(`${panelCount}段のコマを結合しました。文字や吹き出しを追加できます。`, "success");
+    pushToast("編集画面へ反映しました。「2/3コマ」から同じ状態を再編集できます。", "success");
   };
 
   const handlePatchObject = (id: string, patch: Partial<EditorObject>) => {
@@ -475,6 +504,8 @@ export function App() {
     }
     autosaveLoadedRef.current = true;
     await restoreProject(autosave, true, true);
+    setTwoPanelSession(undefined);
+    setTwoPanelOpen(false);
     pushToast("自動保存から復旧しました。", "success");
   };
 
@@ -562,7 +593,7 @@ export function App() {
         onDelete={() => engineRef.current?.deleteSelected()}
         onEyedropper={() => setActiveTool(activeTool === "eyedropper" ? "select" : "eyedropper")}
         onMosaic={handleOpenMosaic}
-        onTwoPanel={() => setTwoPanelOpen(true)}
+        onTwoPanel={handleOpenTwoPanel}
         onSwapLayout={() => patchProject((draft) => ({
           ...draft,
           settings: {
@@ -630,7 +661,7 @@ export function App() {
       <nav className="mobile-nav" aria-label="スマホ編集メニュー">
         <button className={mobilePanel === "canvas" ? "active" : ""} onClick={() => setMobilePanel("canvas")}><MousePointer2 size={20} />編集</button>
         <button className={mobilePanel === "add" ? "active" : ""} onClick={() => setMobilePanel("add")}><PlusSquare size={20} />追加</button>
-        <button onClick={() => setTwoPanelOpen(true)}><PanelsTopLeft size={20} />2/3コマ</button>
+        <button onClick={handleOpenTwoPanel}><PanelsTopLeft size={20} />2/3コマ</button>
         <button onClick={handleOpenMosaic}><Grid3X3 size={20} />モザイク</button>
         <button className={mobilePanel === "adjust" ? "active" : ""} onClick={() => setMobilePanel("adjust")}><SlidersHorizontal size={20} />調整</button>
       </nav>
@@ -640,9 +671,10 @@ export function App() {
         {autosaveAvailable && <button onClick={handleClearAutosave}>自動保存クリア</button>}
       </div>
       {toast && <div className={`toast ${toast.tone}`}>{toast.text}</div>}
-      {twoPanelOpen && (
+      {twoPanelSession && (
         <TwoPanelComposer
-          initialImage={project.assets.baseImage ? { name: project.assets.baseImage.name, dataUrl: project.assets.baseImage.dataUrl } : undefined}
+          open={twoPanelOpen}
+          initialImage={twoPanelSession.initialImage}
           onCancel={() => setTwoPanelOpen(false)}
           onApply={(dataUrl, size, panelCount) => void handleApplyTwoPanel(dataUrl, size, panelCount)}
         />

@@ -672,6 +672,10 @@ textarea {
   font-size: 11px;
 }
 
+.two-panel-editor[hidden] {
+  display: none;
+}
+
 .two-panel-editor {
   position: fixed;
   inset: 0;
@@ -767,6 +771,13 @@ textarea {
   vector-effect: non-scaling-stroke;
 }
 
+.two-panel-seam.active,
+.two-panel-sub-seam.active {
+  stroke-width: 6;
+  stroke-dasharray: 14 7;
+  filter: drop-shadow(0 0 4px currentColor);
+}
+
 .two-panel-selection {
   fill: transparent;
   stroke: #4f9cff;
@@ -796,31 +807,32 @@ textarea {
 
 .two-panel-zone-rail {
   position: relative;
-  flex: 0 0 50px;
-  width: 50px;
+  flex: 0 0 44px;
+  width: 44px;
 }
 
 .two-panel-zone-rail button {
   position: absolute;
   left: 0;
-  width: 50px;
-  min-width: 50px;
+  width: 44px;
+  min-width: 44px;
   min-height: 44px;
   display: grid;
   place-items: center;
   gap: 1px;
   padding: 4px 2px;
   transform: translateY(-50%);
+  border-color: var(--zone-color, #4b5668);
   background: rgba(19, 23, 32, 0.96);
-  color: #c7cfdb;
+  color: var(--zone-color, #c7cfdb);
   font-size: 11px;
 }
 
 .two-panel-zone-rail button.active {
-  border-color: #78a4ff;
-  background: #2f6fed;
+  border-color: var(--zone-color, #78a4ff);
+  background: var(--zone-color, #2f6fed);
   color: #fff;
-  box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.22);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
 }
 
 .color-patch-outline {
@@ -909,6 +921,31 @@ textarea {
   color: #ffffff;
 }
 
+.two-panel-split-switch button {
+  border-color: var(--zone-color, #4b5668);
+}
+
+.two-panel-split-switch button.active {
+  border-color: var(--zone-color, #78a4ff);
+  background: var(--zone-color, #2f6fed);
+}
+
+.two-panel-cell-tabs button {
+  border-color: var(--cell-color, #4b5668);
+  color: var(--cell-color, #c7cfdb);
+}
+
+.two-panel-cell-tabs button.active {
+  border-color: var(--cell-color, #78a4ff);
+  background: var(--cell-color, #2f6fed);
+  color: #ffffff;
+}
+
+.two-panel-controls button {
+  min-height: 34px;
+  padding: 3px 8px;
+}
+
 .two-panel-reselect,
 .two-panel-reset {
   grid-column: span 2;
@@ -952,8 +989,7 @@ textarea {
 }
 
 .two-panel-dimension-field,
-.two-panel-range-field,
-.two-panel-angle-field {
+.two-panel-range-field {
   min-width: 0;
   display: grid;
   gap: 4px;
@@ -962,8 +998,7 @@ textarea {
 }
 
 .two-panel-dimension-field > span:first-child,
-.two-panel-range-field > span,
-.two-panel-angle-field > span {
+.two-panel-range-field > span {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -994,18 +1029,60 @@ textarea {
   grid-column: span 3;
 }
 
-.two-panel-angle-field {
-  grid-column: span 4;
+.two-panel-angle-controls {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 7px;
+}
+
+.two-panel-angle-section-title {
+  grid-column: 1 / -1;
+  color: #dce3ee;
+  font-size: 12px;
+}
+
+.two-panel-angle-control {
+  min-width: 0;
+  display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
+  gap: 4px 8px;
+  padding: 6px 8px;
+  border: 1px solid #343c49;
+  border-left: 4px solid var(--boundary-color);
+  background: #181d26;
 }
 
-.two-panel-angle-field > span {
+.two-panel-angle-control.active {
+  border-color: var(--boundary-color);
+  box-shadow: inset 0 0 0 1px var(--boundary-color);
+}
+
+.two-panel-angle-label {
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #dce3ee;
+  font-size: 12px;
 }
 
-.two-panel-angle-field > input[type="range"] {
+.two-panel-angle-label i {
+  width: 18px;
+  height: 4px;
+  flex: 0 0 auto;
+  background: var(--boundary-color);
+}
+
+.two-panel-angle-label b {
+  margin-left: auto;
+  color: #ffffff;
+}
+
+.two-panel-angle-control > input[type="range"] {
   grid-column: 1 / -1;
+  accent-color: var(--boundary-color);
 }
 
 .two-panel-remember-angle {
@@ -1030,7 +1107,7 @@ textarea {
 
 .two-panel-dimension-field b,
 .two-panel-range-field b,
-.two-panel-angle-field b {
+.two-panel-angle-control b {
   color: #edf1f7;
 }
 
@@ -1584,34 +1661,40 @@ textarea {
   }
 
   .two-panel-editor {
-    grid-template-rows: 54px minmax(0, 1fr) auto;
+    grid-template-rows: 46px minmax(0, 1fr) minmax(160px, 28dvh);
     height: 100dvh;
     max-height: 100dvh;
   }
 
   .two-panel-topbar {
     grid-template-columns: auto minmax(0, 1fr) auto auto;
-    gap: 6px;
-    padding: 6px 8px;
+    gap: 4px;
+    padding: 4px 6px;
   }
 
   .two-panel-topbar > div { display: none; }
 
   .two-panel-topbar button {
-    min-width: 42px;
-    padding: 0 9px;
+    min-width: 36px;
+    min-height: 34px;
+    padding: 0 7px;
   }
 
   .two-panel-topbar .primary span { display: none; }
 
-  .two-panel-stage { padding: 8px; }
+  .two-panel-stage { padding: 4px; }
+
+  .two-panel-stage-layout {
+    gap: 4px;
+  }
 
   .two-panel-controls {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    max-height: min(43dvh, 330px);
-    padding: 9px;
-    padding-bottom: max(9px, env(safe-area-inset-bottom));
+    gap: 6px;
+    height: min(28dvh, 260px);
+    max-height: none;
+    padding: 6px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
   }
 
   .two-panel-count-switch,
@@ -1621,7 +1704,7 @@ textarea {
   .two-panel-tool-switch,
   .two-panel-size-controls,
   .two-panel-range-field,
-  .two-panel-angle-field,
+  .two-panel-angle-controls,
   .two-panel-error {
     grid-column: 1 / -1;
   }
@@ -1632,13 +1715,16 @@ textarea {
   }
 
   .two-panel-zone-rail {
-    flex-basis: 48px;
-    width: 48px;
+    flex-basis: 42px;
+    width: 42px;
   }
 
   .two-panel-zone-rail button {
-    width: 48px;
-    min-width: 48px;
+    width: 42px;
+    min-width: 42px;
+    min-height: 36px;
+    padding: 2px 1px;
+    font-size: 10px;
   }
 
   .color-patch-controls {
@@ -1648,12 +1734,26 @@ textarea {
 
   .two-panel-controls button {
     min-width: 0;
-    min-height: 40px;
-    padding: 4px 7px;
+    min-height: 32px;
+    padding: 2px 5px;
+    font-size: 13px;
+  }
+
+  .two-panel-angle-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .two-panel-angle-control {
+    padding: 5px 6px;
+  }
+
+  .two-panel-dimension-control {
+    grid-template-columns: minmax(0, 1fr) 28px;
   }
 
   .two-panel-dimension-control button {
-    min-height: 24px;
+    min-width: 28px;
+    min-height: 22px;
   }
   .mosaic-editor {
     grid-template-rows: 54px minmax(0, 1fr) auto;
