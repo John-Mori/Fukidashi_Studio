@@ -1,4 +1,5 @@
-﻿import { findPairedFrameText, isTextFrameObject, type TextFrameObject } from "../../project/model/frameText";
+﻿import { ScanText } from "lucide-react";
+import { findPairedFrameText, isTextFrameObject, type TextFrameObject } from "../../project/model/frameText";
 import type { BubbleObject, EditorObject, ProjectDocument, ShapeObject, TextObject } from "../../project/model/types";
 import { MobileInspector } from "./MobileInspector";
 
@@ -12,6 +13,7 @@ type InspectorProps = {
   onCenterPair: (object: EditorObject) => void;
   onSetFrameText: (object: TextFrameObject, text: string) => void;
   onCleanBubbleFrame: (object: BubbleObject) => void;
+  onMatchFont: (object: TextObject) => void;
 };
 
 type NumberFieldProps = {
@@ -59,7 +61,7 @@ function BoldButton({ active, onToggle }: { active: boolean; onToggle: () => voi
   );
 }
 
-export function Inspector({ project, selectedObject, currentColor, onPatch, onSetCurrentColor, onLinkNearestBubble, onCenterPair, onSetFrameText, onCleanBubbleFrame }: InspectorProps) {
+export function Inspector({ project, selectedObject, currentColor, onPatch, onSetCurrentColor, onLinkNearestBubble, onCenterPair, onSetFrameText, onCleanBubbleFrame, onMatchFont }: InspectorProps) {
   if (!selectedObject) {
     return (
       <>
@@ -70,7 +72,7 @@ export function Inspector({ project, selectedObject, currentColor, onPatch, onSe
             <span>画像を開いて、吹き出し・文字・図形を配置します。</span>
           </div>
         </footer>
-        <MobileInspector project={project} currentColor={currentColor} onPatch={onPatch} onSetCurrentColor={onSetCurrentColor} onLinkNearestBubble={onLinkNearestBubble} onCenterPair={onCenterPair} onSetFrameText={onSetFrameText} onCleanBubbleFrame={onCleanBubbleFrame} />
+        <MobileInspector project={project} currentColor={currentColor} onPatch={onPatch} onSetCurrentColor={onSetCurrentColor} onLinkNearestBubble={onLinkNearestBubble} onCenterPair={onCenterPair} onSetFrameText={onSetFrameText} onCleanBubbleFrame={onCleanBubbleFrame} onMatchFont={onMatchFont} />
       </>
     );
   }
@@ -99,18 +101,18 @@ export function Inspector({ project, selectedObject, currentColor, onPatch, onSe
         <label className="toggle-label">
           <input type="checkbox" checked={selectedObject.transform.flipY} onChange={(event) => patchTransform("flipY", event.target.checked)} /> 上下反転
         </label>
-        {selectedObject.type === "text" && <TextInspector object={selectedObject} onPatch={onPatch} onSetCurrentColor={onSetCurrentColor} onLinkNearestBubble={onLinkNearestBubble} onCenterPair={onCenterPair} />}
+        {selectedObject.type === "text" && <TextInspector object={selectedObject} onPatch={onPatch} onSetCurrentColor={onSetCurrentColor} onLinkNearestBubble={onLinkNearestBubble} onCenterPair={onCenterPair} onMatchFont={onMatchFont} />}
         {selectedObject.type === "shape" && <ShapeInspector object={selectedObject} currentColor={currentColor} onPatch={onPatch} onSetCurrentColor={onSetCurrentColor} />}
-        {isTextFrameObject(selectedObject) && <FrameTextInspector object={selectedObject} pairedText={pairedFrameText} onPatch={onPatch} onSetFrameText={onSetFrameText} />}
+        {isTextFrameObject(selectedObject) && <FrameTextInspector object={selectedObject} pairedText={pairedFrameText} onPatch={onPatch} onSetFrameText={onSetFrameText} onMatchFont={onMatchFont} />}
         {selectedObject.type === "bubble" && <BubbleInspector object={selectedObject} onCleanBubbleFrame={onCleanBubbleFrame} />}
       </div>
       </footer>
-      <MobileInspector project={project} selectedObject={selectedObject} currentColor={currentColor} onPatch={onPatch} onSetCurrentColor={onSetCurrentColor} onLinkNearestBubble={onLinkNearestBubble} onCenterPair={onCenterPair} onSetFrameText={onSetFrameText} onCleanBubbleFrame={onCleanBubbleFrame} />
+      <MobileInspector project={project} selectedObject={selectedObject} currentColor={currentColor} onPatch={onPatch} onSetCurrentColor={onSetCurrentColor} onLinkNearestBubble={onLinkNearestBubble} onCenterPair={onCenterPair} onSetFrameText={onSetFrameText} onCleanBubbleFrame={onCleanBubbleFrame} onMatchFont={onMatchFont} />
     </>
   );
 }
 
-function TextInspector({ object, onPatch, onSetCurrentColor, onLinkNearestBubble, onCenterPair }: { object: TextObject; onPatch: (id: string, patch: Partial<EditorObject>) => void; onSetCurrentColor: (color: string) => void; onLinkNearestBubble: (object: TextObject) => void; onCenterPair: (object: EditorObject) => void }) {
+function TextInspector({ object, onPatch, onSetCurrentColor, onLinkNearestBubble, onCenterPair, onMatchFont }: { object: TextObject; onPatch: (id: string, patch: Partial<EditorObject>) => void; onSetCurrentColor: (color: string) => void; onLinkNearestBubble: (object: TextObject) => void; onCenterPair: (object: EditorObject) => void; onMatchFont: (object: TextObject) => void }) {
   return (
     <>
       <label className="wide-field text-edit-field">
@@ -128,6 +130,7 @@ function TextInspector({ object, onPatch, onSetCurrentColor, onLinkNearestBubble
         </select>
       </label>
       <NumberField label="文字サイズ" min={8} max={180} value={object.fontSize} onChange={(value) => onPatch(object.id, { fontSize: value } as Partial<EditorObject>)} />
+      <button type="button" className="font-match-launch" onClick={() => onMatchFont(object)}><ScanText size={18} />画像の文字に合わせる</button>
       <label>
         文字色
         <input type="color" value={object.fill} onChange={(event) => { onSetCurrentColor(event.target.value); onPatch(object.id, { fill: event.target.value } as Partial<EditorObject>); }} />
@@ -165,7 +168,7 @@ function ShapeInspector({ object, currentColor, onPatch, onSetCurrentColor }: { 
   );
 }
 
-function FrameTextInspector({ object, pairedText, onPatch, onSetFrameText }: { object: TextFrameObject; pairedText?: TextObject; onPatch: (id: string, patch: Partial<EditorObject>) => void; onSetFrameText: (object: TextFrameObject, text: string) => void }) {
+function FrameTextInspector({ object, pairedText, onPatch, onSetFrameText, onMatchFont }: { object: TextFrameObject; pairedText?: TextObject; onPatch: (id: string, patch: Partial<EditorObject>) => void; onSetFrameText: (object: TextFrameObject, text: string) => void; onMatchFont: (object: TextObject) => void }) {
   return (
     <>
       <label className="wide-field frame-text-field">
@@ -179,6 +182,7 @@ function FrameTextInspector({ object, pairedText, onPatch, onSetFrameText }: { o
         }} />
       </div>
       <button type="button" onClick={() => onSetFrameText(object, pairedText?.text ?? "セリフ")}>余白を整える</button>
+      {pairedText && <button type="button" className="font-match-launch" onClick={() => onMatchFont(pairedText)}><ScanText size={18} />画像の文字に合わせる</button>}
     </>
   );
 }

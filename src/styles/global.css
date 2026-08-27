@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   color-scheme: dark;
   font-family: "BIZ UDPGothic", "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif;
   background: #101217;
@@ -1842,5 +1842,316 @@ textarea {
   .mosaic-view-reset {
     top: 8px;
     right: 8px;
+  }
+}
+.font-match-launch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.font-match-editor {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  grid-template-rows: 58px minmax(240px, 1fr) minmax(250px, auto);
+  background: #0d1016;
+  color: #edf1f7;
+}
+
+.font-match-topbar {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  padding-top: max(7px, env(safe-area-inset-top));
+  border-bottom: 1px solid #2a303b;
+  background: #131720;
+}
+
+.font-match-topbar > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.font-match-topbar strong,
+.font-match-topbar span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.font-match-topbar > div span {
+  color: #8e98aa;
+  font-size: 11px;
+}
+
+.font-match-topbar > button:last-child {
+  min-width: 82px;
+}
+
+.font-match-stage {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  overscroll-behavior: none;
+  padding: 14px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    #0d1016;
+  background-size: 24px 24px;
+}
+
+.font-match-canvas-wrap {
+  position: relative;
+  display: flex;
+  transform-origin: center center;
+  will-change: transform;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.42);
+}
+
+.font-match-canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.font-match-selection {
+  position: absolute;
+  z-index: 2;
+  border: 3px solid #49a2ff;
+  background: rgba(73, 162, 255, 0.12);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+
+.font-match-selection b {
+  position: absolute;
+  top: -27px;
+  left: -3px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: #2f6fed;
+  color: #ffffff;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.font-match-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #111722;
+  color: #aab4c4;
+}
+
+.font-match-controls {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 14px;
+  padding: 12px max(16px, calc((100vw - 1280px) / 2));
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid #2a303b;
+  background: #131720;
+}
+
+.font-match-inputs {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-content: start;
+}
+
+.font-match-inputs > label {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 5px;
+  color: #aab4c4;
+  font-size: 12px;
+}
+
+.font-match-inputs textarea {
+  min-height: 64px;
+  resize: vertical;
+  font-size: 20px;
+}
+
+.font-match-writing-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.font-match-writing-mode button.active {
+  border-color: #78a4ff;
+  background: #2f6fed;
+  color: #ffffff;
+}
+
+.font-match-analyze {
+  min-width: 150px;
+}
+
+.font-match-status {
+  grid-column: 1 / -1;
+  min-height: 18px;
+  color: #9eacc1;
+  font-size: 11px;
+}
+
+.font-match-results {
+  min-width: 0;
+  max-height: 270px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(250px, 1fr));
+  gap: 7px;
+  overflow-y: auto;
+}
+
+.font-match-result {
+  min-width: 0;
+  min-height: 66px;
+  display: grid;
+  grid-template-columns: 26px minmax(68px, 0.7fr) minmax(110px, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  text-align: left;
+  background: #191f2a;
+}
+
+.font-match-result:hover,
+.font-match-result:focus-visible {
+  border-color: #4f9cff;
+  background: #202a39;
+}
+
+.font-match-rank {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #2f6fed;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.font-match-preview {
+  min-width: 0;
+  max-height: 48px;
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.font-match-result-meta {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.font-match-result-meta strong,
+.font-match-result-meta small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.font-match-result-meta small {
+  color: #9eacc1;
+  font-size: 10px;
+}
+
+.spin {
+  animation: font-match-spin 0.9s linear infinite;
+}
+
+@keyframes font-match-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 720px), (max-width: 900px) and (max-height: 500px) {
+  .font-match-editor {
+    grid-template-rows: calc(54px + env(safe-area-inset-top)) minmax(220px, 44vh) minmax(0, 1fr);
+  }
+
+  .font-match-topbar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 6px;
+    padding-inline: 8px;
+  }
+
+  .font-match-topbar button {
+    min-width: 44px;
+    padding: 0 9px;
+  }
+
+  .font-match-topbar button span {
+    display: none;
+  }
+
+  .font-match-topbar > button:last-child {
+    min-width: 58px;
+  }
+
+  .font-match-stage {
+    padding: 8px;
+  }
+
+  .font-match-controls {
+    display: block;
+    padding: 10px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    overflow-y: auto;
+  }
+
+  .font-match-inputs {
+    grid-template-columns: 1fr auto;
+  }
+
+  .font-match-inputs textarea {
+    min-height: 54px;
+    font-size: 18px;
+  }
+
+  .font-match-analyze {
+    min-width: 132px;
+  }
+
+  .font-match-results {
+    max-height: none;
+    grid-template-columns: 1fr;
+    margin-top: 8px;
+    overflow: visible;
+  }
+
+  .font-match-result {
+    min-height: 62px;
+    grid-template-columns: 25px minmax(62px, 0.6fr) minmax(105px, 1fr) auto;
+  }
+
+  .font-match-preview {
+    font-size: 19px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
   }
 }

@@ -1,4 +1,4 @@
-import { AlignCenter, FlipHorizontal2, FlipVertical2, MessageSquareText, Minus, Palette, Plus, SlidersHorizontal } from "lucide-react";
+﻿import { AlignCenter, FlipHorizontal2, FlipVertical2, MessageSquareText, Minus, Palette, Plus, ScanText, SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 import { findPairedFrameText, isTextFrameObject, type TextFrameObject } from "../../project/model/frameText";
 import type { BubbleObject, EditorObject, ProjectDocument, ShapeObject, TextObject } from "../../project/model/types";
@@ -13,6 +13,7 @@ type MobileInspectorProps = {
   onCenterPair: (object: EditorObject) => void;
   onSetFrameText: (object: TextFrameObject, text: string) => void;
   onCleanBubbleFrame: (object: BubbleObject) => void;
+  onMatchFont: (object: TextObject) => void;
 };
 
 type InspectorSection = "content" | "style" | "position";
@@ -86,7 +87,7 @@ function MobileBoldButton({ text, onPatch, onSetFrameText, frame }: {
 }
 
 export function MobileInspector(props: MobileInspectorProps) {
-  const { project, selectedObject, currentColor, onPatch, onSetCurrentColor, onLinkNearestBubble, onCenterPair, onSetFrameText, onCleanBubbleFrame } = props;
+  const { project, selectedObject, currentColor, onPatch, onSetCurrentColor, onLinkNearestBubble, onCenterPair, onSetFrameText, onCleanBubbleFrame, onMatchFont } = props;
   const [section, setSection] = useState<InspectorSection>("content");
 
   useEffect(() => {
@@ -151,6 +152,7 @@ export function MobileInspector(props: MobileInspectorProps) {
                     </select>
                   )}
                   {pairedText && <CompactStepper label="文字サイズ" min={8} max={180} value={pairedText.fontSize} onChange={(value) => onPatch(pairedText.id, { fontSize: value } as Partial<EditorObject>)} />}
+                  {pairedText && <button type="button" className="font-match-launch" onClick={() => onMatchFont(pairedText)}><ScanText size={18} />画像の文字に合わせる</button>}
                   <button type="button" onClick={() => onSetFrameText(frame, pairedText?.text ?? "セリフ")}><AlignCenter size={18} />余白を整える</button>
                 </div>
               </>
@@ -171,6 +173,7 @@ export function MobileInspector(props: MobileInspectorProps) {
                     <option value="horizontal">横書き</option>
                   </select>
                   <CompactStepper label="文字サイズ" min={8} max={180} value={selectedObject.fontSize} onChange={(value) => onPatch(selectedObject.id, { fontSize: value } as Partial<EditorObject>)} />
+                  <button type="button" className="font-match-launch" onClick={() => onMatchFont(selectedObject)}><ScanText size={18} />画像の文字に合わせる</button>
                   <button type="button" onClick={() => onLinkNearestBubble(selectedObject)}>近い枠にリンク</button>
                 </div>
               </>

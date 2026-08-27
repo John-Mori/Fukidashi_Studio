@@ -4,6 +4,7 @@ import { Grid3X3, Maximize2, MousePointer2, Pipette, PlusSquare, SlidersHorizont
 import { PanelsTopLeft } from "lucide-react";
 import { CanvasStage } from "../components/canvas/CanvasStage";
 import { TwoPanelComposer } from "../components/compose/TwoPanelComposer";
+import { FontMatchEditor } from "../components/font/FontMatchEditor";
 import { MosaicEditor } from "../components/mosaic/MosaicEditor";
 import { Inspector } from "../components/panels/Inspector";
 import { SidePanel } from "../components/panels/SidePanel";
@@ -86,6 +87,7 @@ export function App() {
   const [mosaicOpen, setMosaicOpen] = useState(false);
   const [twoPanelOpen, setTwoPanelOpen] = useState(false);
   const [twoPanelSession, setTwoPanelSession] = useState<TwoPanelSession>();
+  const [fontMatchTargetId, setFontMatchTargetId] = useState<string>();
 
   const project = useProjectStore((state) => state.project);
   const past = useProjectStore((state) => state.past);
@@ -111,6 +113,7 @@ export function App() {
   const markAutosaveAvailable = useProjectStore((state) => state.markAutosaveAvailable);
 
   const selectedObject = useMemo(() => project.objects.find((object) => selectedIds.includes(object.id)), [project.objects, selectedIds]);
+  const fontMatchTarget = useMemo(() => project.objects.find((object): object is TextObject => object.id === fontMatchTargetId && object.type === "text"), [fontMatchTargetId, project.objects]);
   const selectedType = getSelectedType();
   const isPreviewLeft = project.settings.layout.previewPosition === "left";
 
@@ -203,7 +206,7 @@ export function App() {
   };
 
   const handlePasteImage = useCallback(async (event: ClipboardEvent) => {
-    if (twoPanelOpen || mosaicOpen) return;
+    if (twoPanelOpen || mosaicOpen || fontMatchTargetId) return;
     const items = event.clipboardData?.items;
     if (!items || items.length === 0) return;
 
@@ -217,7 +220,7 @@ export function App() {
     event.preventDefault();
     const pastedFile = file.name ? file : new File([file], imageFileName(file), { type: detectSupportedImageType(file) ?? "image/png", lastModified: file.lastModified });
     await loadBaseImageFile(pastedFile);
-  }, [loadBaseImageFile, mosaicOpen, twoPanelOpen]);
+  }, [fontMatchTargetId, loadBaseImageFile, mosaicOpen, twoPanelOpen]);
 
   useEffect(() => {
     window.addEventListener("paste", handlePasteImage);
@@ -674,7 +677,7 @@ export function App() {
         </section>
       </main>
 
-      <Inspector project={project} selectedObject={selectedObject} currentColor={currentColor} onPatch={handlePatchObject} onSetCurrentColor={setCurrentColor} onLinkNearestBubble={handleLinkNearestBubble} onCenterPair={handleCenterPair} onSetFrameText={(frame, text) => void handleSetFrameText(frame, text)} onCleanBubbleFrame={(bubble) => void handleCleanBubbleFrame(bubble)} />
+      <Inspector project={project} selectedObject={selectedObject} currentColor={currentColor} onPatch={handlePatchObject} onSetCurrentColor={setCurrentColor} onLinkNearestBubble={handleLinkNearestBubble} onCenterPair={handleCenterPair} onSetFrameText={(frame, text) => void handleSetFrameText(frame, text)} onCleanBubbleFrame={(bubble) => void handleCleanBubbleFrame(bubble)} onMatchFont={(object) => { if (!ensureImage()) return; setActiveTool("select"); setFontMatchTargetId(object.id); }} />
       <StatusBar project={project} zoom={zoom} selectedType={selectedType} currentColor={currentColor} autosaveAvailable={autosaveAvailable} />
 
       <nav className="mobile-nav" aria-label="スマホ編集メニュー">
@@ -696,6 +699,19 @@ export function App() {
           initialImage={twoPanelSession.initialImage}
           onCancel={() => setTwoPanelOpen(false)}
           onApply={(dataUrl, size, panelCount) => void handleApplyTwoPanel(dataUrl, size, panelCount)}
+        />
+      )}
+      {fontMatchTarget && project.assets.baseImage && (
+        <FontMatchEditor
+          sourceDataUrl={project.assets.baseImage.dataUrl}
+          imageName={project.assets.baseImage.name}
+          target={fontMatchTarget}
+          onCancel={() => setFontMatchTargetId(undefined)}
+          onApply={(patch) => {
+            handlePatchObject(fontMatchTarget.id, patch as Partial<EditorObject>);
+            setFontMatchTargetId(undefined);
+            pushToast("フォント・文字サイズ・太さを適用しました。", "success");
+          }}
         />
       )}
       {mosaicOpen && project.assets.baseImage && (
