@@ -1,6 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useState } from "react";
-import { Grid3X3, Maximize2, MousePointer2, PlusSquare, SlidersHorizontal, ZoomIn, ZoomOut } from "lucide-react";
+import { Grid3X3, Maximize2, MousePointer2, Pipette, PlusSquare, SlidersHorizontal, ZoomIn, ZoomOut } from "lucide-react";
 import { PanelsTopLeft } from "lucide-react";
 import { CanvasStage } from "../components/canvas/CanvasStage";
 import { TwoPanelComposer } from "../components/compose/TwoPanelComposer";
@@ -358,6 +358,12 @@ export function App() {
     setMosaicOpen(true);
   };
 
+  const handleEyedropper = () => {
+    if (!ensureImage()) return;
+    setMobilePanel("canvas");
+    setActiveTool(activeTool === "eyedropper" ? "select" : "eyedropper");
+  };
+
   const handleApplyMosaic = async (dataUrl: string) => {
     const baseImage = project.assets.baseImage;
     if (!baseImage) return;
@@ -591,7 +597,7 @@ export function App() {
         onAddEllipse={() => void handleAddShape("ellipse")}
         onAddLine={() => void handleAddShape("line")}
         onDelete={() => engineRef.current?.deleteSelected()}
-        onEyedropper={() => setActiveTool(activeTool === "eyedropper" ? "select" : "eyedropper")}
+        onEyedropper={handleEyedropper}
         onMosaic={handleOpenMosaic}
         onTwoPanel={handleOpenTwoPanel}
         onSwapLayout={() => patchProject((draft) => ({
@@ -642,11 +648,24 @@ export function App() {
               if (ids.length > 0 && window.matchMedia(MOBILE_LAYOUT_QUERY).matches) setMobilePanel("adjust");
             }}
             onZoom={setZoom}
-            onColorPicked={setCurrentColor}
+            onColorPicked={(color) => {
+              setCurrentColor(color);
+              setActiveTool("select");
+            }}
             onToast={pushToast}
           />
           {project.assets.baseImage && (
-            <div className="mobile-canvas-tools" aria-label="表示倍率">
+            <div className="mobile-canvas-tools" aria-label="編集と表示">
+              <button
+                className={activeTool === "eyedropper" ? "mobile-eyedropper-button active" : "mobile-eyedropper-button"}
+                title={activeTool === "eyedropper" ? "スポイトを終了" : "スポイトで色隠し"}
+                aria-label={activeTool === "eyedropper" ? "スポイトを終了" : "スポイトで色隠し"}
+                aria-pressed={activeTool === "eyedropper"}
+                onClick={handleEyedropper}
+              >
+                <Pipette size={19} />
+                <span className="mobile-color-chip" style={{ backgroundColor: currentColor }} />
+              </button>
               <button title="縮小" onClick={() => engineRef.current?.zoomBy(0.85)}><ZoomOut size={19} /></button>
               <button title="全体表示" onClick={() => engineRef.current?.fitToViewport()}><Maximize2 size={19} /></button>
               <button title="拡大" onClick={() => engineRef.current?.zoomBy(1.15)}><ZoomIn size={19} /></button>
@@ -660,10 +679,10 @@ export function App() {
 
       <nav className="mobile-nav" aria-label="スマホ編集メニュー">
         <button className={mobilePanel === "canvas" ? "active" : ""} onClick={() => setMobilePanel("canvas")}><MousePointer2 size={20} />編集</button>
-        <button className={mobilePanel === "add" ? "active" : ""} onClick={() => setMobilePanel("add")}><PlusSquare size={20} />追加</button>
+        <button className={mobilePanel === "add" ? "active" : ""} onClick={() => { setActiveTool("select"); setMobilePanel("add"); }}><PlusSquare size={20} />追加</button>
         <button onClick={handleOpenTwoPanel}><PanelsTopLeft size={20} />2/3コマ</button>
         <button onClick={handleOpenMosaic}><Grid3X3 size={20} />モザイク</button>
-        <button className={mobilePanel === "adjust" ? "active" : ""} onClick={() => setMobilePanel("adjust")}><SlidersHorizontal size={20} />調整</button>
+        <button className={mobilePanel === "adjust" ? "active" : ""} onClick={() => { setActiveTool("select"); setMobilePanel("adjust"); }}><SlidersHorizontal size={20} />調整</button>
       </nav>
 
       <div className="autosave-actions">

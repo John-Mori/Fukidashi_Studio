@@ -1626,14 +1626,40 @@ textarea {
     top: 10px;
     right: 10px;
     z-index: 4;
-    display: flex;
+    display: none;
     gap: 6px;
+  }
+
+  .app-root[data-mobile-panel="canvas"] .mobile-canvas-tools {
+    display: flex;
   }
 
   .mobile-canvas-tools button {
     width: 44px;
     padding: 0;
     background: rgba(19, 23, 32, 0.94);
+  }
+
+  .mobile-canvas-tools button.active {
+    border-color: #4f9cff;
+    background: #2f6fed;
+    color: #ffffff;
+  }
+
+  .mobile-eyedropper-button {
+    position: relative;
+  }
+
+  .mobile-color-chip {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    width: 11px;
+    height: 11px;
+    border: 2px solid #ffffff;
+    border-radius: 2px;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.72);
+    pointer-events: none;
   }
 
   .empty-canvas-state {

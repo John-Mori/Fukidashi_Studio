@@ -1,8 +1,9 @@
-﻿import * as fabric from "fabric";
+import * as fabric from "fabric";
 import { createBubbleObject, createShapeObject, createTextObject, displayTextForWritingMode } from "../../project/model/defaults";
 import type { BubbleObject, CanvasSize, EditorObject, ExportOptions, ProjectDocument, ShapeObject, TemplateAsset, TextObject, ViewState } from "../../project/model/types";
 import { clampZoom, fitToViewport, zoomAroundPoint } from "../viewport";
 import { rgbaToHex } from "../../platform/browser/fileHelpers";
+import { createEyedropperPatchShape } from "../eyedropperPatch";
 
 type FabricObject = any;
 type FabricCanvas = any;
@@ -384,7 +385,7 @@ export class FabricEditorAdapter {
     this.canvas.on("mouse:down", (event: any) => {
       const native = event.e as MouseEvent;
       if (this.activeTool === "eyedropper") {
-        this.pickColor(native);
+        void this.pickColor(native);
         return;
       }
       if (this.activeTool === "pan" || native.button === 1 || native.altKey) {
@@ -408,25 +409,42 @@ export class FabricEditorAdapter {
     this.canvas.on("mouse:up", () => {
       this.isPanning = false;
       this.canvas.selection = true;
-      this.canvas.defaultCursor = this.activeTool === "pan" ? "grab" : "default";
+      this.canvas.defaultCursor = this.activeTool === "pan" ? "grab" : this.activeTool === "eyedropper" ? "crosshair" : "default";
     });
   }
 
-  private pickColor(native: MouseEvent): void {
+  private async pickColor(native: MouseEvent): Promise<void> {
     const element = this.canvas.lowerCanvasEl as HTMLCanvasElement;
     const rect = element.getBoundingClientRect();
-    const x = Math.floor(native.clientX - rect.left);
-    const y = Math.floor(native.clientY - rect.top);
+    const localX = native.clientX - rect.left;
+    const localY = native.clientY - rect.top;
+    const sampleX = Math.min(element.width - 1, Math.max(0, Math.floor(localX * element.width / Math.max(1, rect.width))));
+    const sampleY = Math.min(element.height - 1, Math.max(0, Math.floor(localY * element.height / Math.max(1, rect.height))));
     const context = element.getContext("2d");
     if (!context) return;
-    const [r, g, b, a] = context.getImageData(x, y, 1, 1).data;
+    const [r, g, b, a] = context.getImageData(sampleX, sampleY, 1, 1).data;
     if (a === 0) {
       this.callbacks.onToast("透明ピクセルです。色は取得しませんでした。", "warning");
       return;
     }
+
     const color = rgbaToHex(r, g, b);
+    const scenePoint = this.canvas.getScenePoint?.(native) ?? {
+      x: (localX - this.view.panX) / this.view.zoom,
+      y: (localY - this.view.panY) / this.view.zoom,
+    };
+    const patch = createEyedropperPatchShape(
+      { x: Number(scenePoint.x), y: Number(scenePoint.y) },
+      color,
+      this.project.canvas,
+    );
+    const fabricObject = await this.createFabricObject(patch);
+    if (!fabricObject) return;
+    this.canvas.add(fabricObject);
+    this.canvas.setActiveObject(fabricObject);
+    this.commit(true);
     this.callbacks.onColorPicked(color);
-    this.callbacks.onToast(`色を取得しました: ${color}`, "success");
+    this.callbacks.onToast(`色を取得し、隠し用の四角を追加しました: ${color}`, "success");
   }
 
   private async createFabricObject(object: EditorObject): Promise<FabricObject | undefined> {
