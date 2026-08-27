@@ -4,7 +4,8 @@ export const MIN_OUTPUT_SIZE = 320;
 export const MAX_OUTPUT_SIZE = 4096;
 
 export type PanelCount = 2 | 3;
-export type PanelFit = "cover" | "contain";
+export type SubpanelCount = 1 | 2 | 3;
+export type PanelFit = "cover" | "contain" | "custom";
 
 export type PanelCrop = {
   zoom: number;
@@ -53,6 +54,11 @@ export const DEFAULT_BOUNDARY_RATIOS: Record<PanelCount, number[]> = {
   2: [0.55],
   3: [0.34, 0.67],
 };
+export const DEFAULT_SUBPANEL_RATIOS: Record<SubpanelCount, number[]> = {
+  1: [],
+  2: [0.5],
+  3: [0.34, 0.67],
+};
 
 export function clampOutputSize(value: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
@@ -73,6 +79,19 @@ export function normalizeBoundaryRatios(panelCount: PanelCount, values: number[]
   if (panelCount === 2) return [clampSplitRatio(values[0] ?? DEFAULT_BOUNDARY_RATIOS[2][0])];
   const first = Math.min(0.65, Math.max(0.15, values[0] ?? DEFAULT_BOUNDARY_RATIOS[3][0]));
   const second = Math.min(0.85, Math.max(0.35, values[1] ?? DEFAULT_BOUNDARY_RATIOS[3][1]));
+  if (second - first >= 0.15) return [first, second];
+  const center = (first + second) / 2;
+  return [Math.max(0.15, center - 0.075), Math.min(0.85, center + 0.075)];
+}
+
+export function normalizeSubpanelRatios(count: SubpanelCount, values: number[]): number[] {
+  if (count === 1) return [];
+  if (count === 2) {
+    const value = Number.isFinite(values[0]) ? values[0] : DEFAULT_SUBPANEL_RATIOS[2][0];
+    return [Math.min(0.8, Math.max(0.2, value))];
+  }
+  const first = Math.min(0.65, Math.max(0.15, values[0] ?? DEFAULT_SUBPANEL_RATIOS[3][0]));
+  const second = Math.min(0.85, Math.max(0.35, values[1] ?? DEFAULT_SUBPANEL_RATIOS[3][1]));
   if (second - first >= 0.15) return [first, second];
   const center = (first + second) / 2;
   return [Math.max(0.15, center - 0.075), Math.min(0.85, center + 0.075)];
@@ -123,6 +142,41 @@ export function createPanelLayout(
   return { width: safeWidth, height: safeHeight, boundaries, panels };
 }
 
+function interpolate(start: number, end: number, ratio: number): number {
+  return start + (end - start) * ratio;
+}
+
+export function splitPanelGeometry(panel: PanelGeometry, count: SubpanelCount, ratios: number[]): PanelGeometry[] {
+  const normalized = normalizeSubpanelRatios(count, ratios);
+  const left = panel.polygon[0].x;
+  const right = panel.polygon[1].x;
+  const width = Math.max(1, right - left);
+  const positions = [0, ...normalized, 1];
+  return Array.from({ length: count }, (_, index) => {
+    const startRatio = positions[index];
+    const endRatio = positions[index + 1];
+    const x1 = left + width * startRatio;
+    const x2 = left + width * endRatio;
+    const topLeft = interpolate(panel.polygon[0].y, panel.polygon[1].y, startRatio);
+    const topRight = interpolate(panel.polygon[0].y, panel.polygon[1].y, endRatio);
+    const bottomLeft = interpolate(panel.polygon[3].y, panel.polygon[2].y, startRatio);
+    const bottomRight = interpolate(panel.polygon[3].y, panel.polygon[2].y, endRatio);
+    const contentTop = Math.max(topLeft, topRight);
+    const contentBottom = Math.min(bottomLeft, bottomRight);
+    return {
+      index,
+      polygon: [
+        { x: x1, y: topLeft },
+        { x: x2, y: topRight },
+        { x: x2, y: bottomRight },
+        { x: x1, y: bottomLeft },
+      ],
+      bounds: { x: x1, y: Math.min(topLeft, topRight), width: x2 - x1, height: Math.max(1, Math.max(bottomLeft, bottomRight) - Math.min(topLeft, topRight)) },
+      contentRect: { x: x1, y: contentTop, width: x2 - x1, height: Math.max(1, contentBottom - contentTop) },
+    };
+  });
+}
+
 export function panelIndexAtPoint(layout: PanelLayout, x: number, y: number): number {
   const normalizedX = Math.min(layout.width, Math.max(0, x)) / layout.width;
   for (let index = 0; index < layout.boundaries.length; index += 1) {
@@ -133,6 +187,15 @@ export function panelIndexAtPoint(layout: PanelLayout, x: number, y: number): nu
   return layout.panels.length - 1;
 }
 
+export function subpanelIndexAtX(panel: PanelGeometry, count: SubpanelCount, ratios: number[], x: number): number {
+  const normalized = normalizeSubpanelRatios(count, ratios);
+  const ratio = (x - panel.bounds.x) / Math.max(1, panel.bounds.width);
+  for (let index = 0; index < normalized.length; index += 1) {
+    if (ratio < normalized[index]) return index;
+  }
+  return count - 1;
+}
+
 export function imagePlacement(
   source: { width: number; height: number },
   panel: PanelGeometry,
@@ -141,11 +204,12 @@ export function imagePlacement(
 ): ImagePlacement {
   const safeWidth = Math.max(1, source.width);
   const safeHeight = Math.max(1, source.height);
-  const target = fit === "contain" ? panel.contentRect : panel.bounds;
-  const zoom = Math.min(4, Math.max(1, crop.zoom));
-  const baseScale = fit === "contain"
-    ? Math.min(target.width / safeWidth, target.height / safeHeight)
-    : Math.max(target.width / safeWidth, target.height / safeHeight);
+  const target = fit === "cover" ? panel.bounds : panel.contentRect;
+  const minZoom = fit === "custom" ? 0.25 : 1;
+  const zoom = Math.min(4, Math.max(minZoom, crop.zoom));
+  const baseScale = fit === "cover"
+    ? Math.max(target.width / safeWidth, target.height / safeHeight)
+    : Math.min(target.width / safeWidth, target.height / safeHeight);
   const scale = baseScale * zoom;
   const width = safeWidth * scale;
   const height = safeHeight * scale;

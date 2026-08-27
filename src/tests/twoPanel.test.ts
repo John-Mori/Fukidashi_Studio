@@ -5,6 +5,8 @@ import {
   createPanelRects,
   imagePlacement,
   panelIndexAtPoint,
+  splitPanelGeometry,
+  subpanelIndexAtX,
 } from "../editor/twoPanel";
 
 describe("multi panel composer", () => {
@@ -39,6 +41,20 @@ describe("multi panel composer", () => {
     expect(layout.panels.every((panel) => panel.contentRect.height > 0)).toBe(true);
     expect(layout.panels[1].contentRect.height).toBeGreaterThan(0.08 * 1920);
   });
+
+  it("splits a diagonal zone into adjustable gapless columns", () => {
+    const zone = createPanelLayout(3, [0.34, 0.67], 60).panels[1];
+    const cells = splitPanelGeometry(zone, 3, [0.28, 0.74]);
+    expect(cells).toHaveLength(3);
+    expect(cells[0].polygon[1]).toEqual(cells[1].polygon[0]);
+    expect(cells[1].polygon[1]).toEqual(cells[2].polygon[0]);
+    expect(cells[0].bounds.width).toBeCloseTo(1080 * 0.28);
+    expect(cells[1].bounds.width).toBeCloseTo(1080 * 0.46);
+    expect(subpanelIndexAtX(zone, 3, [0.28, 0.74], 200)).toBe(0);
+    expect(subpanelIndexAtX(zone, 3, [0.28, 0.74], 500)).toBe(1);
+    expect(subpanelIndexAtX(zone, 3, [0.28, 0.74], 1000)).toBe(2);
+  });
+
   it("contain mode keeps the entire image inside the diagonal panel", () => {
     const panel = createPanelLayout(2, [0.5], 100).panels[0];
     const placement = imagePlacement(
@@ -51,6 +67,15 @@ describe("multi panel composer", () => {
     expect(placement.y).toBeGreaterThanOrEqual(panel.contentRect.y);
     expect(placement.x + placement.width).toBeLessThanOrEqual(panel.contentRect.x + panel.contentRect.width);
     expect(placement.y + placement.height).toBeLessThanOrEqual(panel.contentRect.y + panel.contentRect.height);
+  });
+
+  it("custom mode supports fine shrinking and enlargement", () => {
+    const panel = splitPanelGeometry(createPanelLayout(2, [0.5], 0).panels[0], 2, [0.5])[0];
+    const normal = imagePlacement({ width: 1000, height: 1000 }, panel, { zoom: 1, offsetX: 0, offsetY: 0 }, "custom");
+    const smaller = imagePlacement({ width: 1000, height: 1000 }, panel, { zoom: 0.5, offsetX: 0, offsetY: 0 }, "custom");
+    const larger = imagePlacement({ width: 1000, height: 1000 }, panel, { zoom: 2, offsetX: 0, offsetY: 0 }, "custom");
+    expect(smaller.width).toBeCloseTo(normal.width / 2);
+    expect(larger.width).toBeCloseTo(normal.width * 2);
   });
 
   it("cover-crops without leaving blank space", () => {

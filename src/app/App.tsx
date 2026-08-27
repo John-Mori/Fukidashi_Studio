@@ -375,7 +375,7 @@ export function App() {
   const handleApplyTwoPanel = async (dataUrl: string, size: { width: number; height: number }, panelCount: 2 | 3) => {
     const baseImage: BaseImageAsset = {
       id: createId("base"),
-      name: `YouTube_Shorts_${panelCount}koma.png`,
+      name: `YouTube_Shorts_${panelCount}dan.png`,
       mimeType: "image/png",
       width: size.width,
       height: size.height,
@@ -383,14 +383,14 @@ export function App() {
       createdAt: nowIso(),
     };
     const next = createEmptyProject(size);
-    next.name = `YouTube Shorts ${panelCount}コマ`;
+    next.name = `YouTube Shorts ${panelCount}段コマ`;
     next.canvas.backgroundAssetId = baseImage.id;
     next.assets = { baseImage, templates: project.assets.templates };
     next.settings.layout.previewPosition = project.settings.layout.previewPosition;
     await restoreProject(next, true, true);
     setTwoPanelOpen(false);
     setMobilePanel("canvas");
-    pushToast(`${panelCount}枚をコマ結合しました。文字や吹き出しを追加できます。`, "success");
+    pushToast(`${panelCount}段のコマを結合しました。文字や吹き出しを追加できます。`, "success");
   };
 
   const handlePatchObject = (id: string, patch: Partial<EditorObject>) => {
