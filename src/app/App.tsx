@@ -196,6 +196,7 @@ export function App() {
   };
 
   const handlePasteImage = useCallback(async (event: ClipboardEvent) => {
+    if (twoPanelOpen || mosaicOpen) return;
     const items = event.clipboardData?.items;
     if (!items || items.length === 0) return;
 
@@ -209,7 +210,7 @@ export function App() {
     event.preventDefault();
     const pastedFile = file.name ? file : new File([file], imageFileName(file), { type: detectSupportedImageType(file) ?? "image/png", lastModified: file.lastModified });
     await loadBaseImageFile(pastedFile);
-  }, [loadBaseImageFile]);
+  }, [loadBaseImageFile, mosaicOpen, twoPanelOpen]);
 
   useEffect(() => {
     window.addEventListener("paste", handlePasteImage);
@@ -371,11 +372,10 @@ export function App() {
     pushToast("モザイク加工を元画像へ適用しました。元に戻すこともできます。", "success");
   };
 
-  const handleApplyTwoPanel = async (dataUrl: string) => {
-    const size = { width: 1080, height: 1920 };
+  const handleApplyTwoPanel = async (dataUrl: string, size: { width: number; height: number }, panelCount: 2 | 3) => {
     const baseImage: BaseImageAsset = {
       id: createId("base"),
-      name: "YouTube_Shorts_2koma.png",
+      name: `YouTube_Shorts_${panelCount}koma.png`,
       mimeType: "image/png",
       width: size.width,
       height: size.height,
@@ -383,14 +383,14 @@ export function App() {
       createdAt: nowIso(),
     };
     const next = createEmptyProject(size);
-    next.name = "YouTube Shorts 2コマ";
+    next.name = `YouTube Shorts ${panelCount}コマ`;
     next.canvas.backgroundAssetId = baseImage.id;
     next.assets = { baseImage, templates: project.assets.templates };
     next.settings.layout.previewPosition = project.settings.layout.previewPosition;
     await restoreProject(next, true, true);
     setTwoPanelOpen(false);
     setMobilePanel("canvas");
-    pushToast("2枚を余白なしで結合しました。文字や吹き出しを追加できます。", "success");
+    pushToast(`${panelCount}枚をコマ結合しました。文字や吹き出しを追加できます。`, "success");
   };
 
   const handlePatchObject = (id: string, patch: Partial<EditorObject>) => {
@@ -630,7 +630,7 @@ export function App() {
       <nav className="mobile-nav" aria-label="スマホ編集メニュー">
         <button className={mobilePanel === "canvas" ? "active" : ""} onClick={() => setMobilePanel("canvas")}><MousePointer2 size={20} />編集</button>
         <button className={mobilePanel === "add" ? "active" : ""} onClick={() => setMobilePanel("add")}><PlusSquare size={20} />追加</button>
-        <button onClick={() => setTwoPanelOpen(true)}><PanelsTopLeft size={20} />2コマ</button>
+        <button onClick={() => setTwoPanelOpen(true)}><PanelsTopLeft size={20} />2/3コマ</button>
         <button onClick={handleOpenMosaic}><Grid3X3 size={20} />モザイク</button>
         <button className={mobilePanel === "adjust" ? "active" : ""} onClick={() => setMobilePanel("adjust")}><SlidersHorizontal size={20} />調整</button>
       </nav>
@@ -644,7 +644,7 @@ export function App() {
         <TwoPanelComposer
           initialImage={project.assets.baseImage ? { name: project.assets.baseImage.name, dataUrl: project.assets.baseImage.dataUrl } : undefined}
           onCancel={() => setTwoPanelOpen(false)}
-          onApply={(dataUrl) => void handleApplyTwoPanel(dataUrl)}
+          onApply={(dataUrl, size, panelCount) => void handleApplyTwoPanel(dataUrl, size, panelCount)}
         />
       )}
       {mosaicOpen && project.assets.baseImage && (

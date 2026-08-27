@@ -55,7 +55,7 @@ export function HeaderToolbar(props: HeaderToolbarProps) {
         <button title="楕円を追加" onClick={props.onAddEllipse}><FlipHorizontal2 size={18} /></button>
         <button title="直線を追加" onClick={props.onAddLine}><FileDown size={18} /></button>
         <button title="スポイト" onClick={props.onEyedropper}><Pipette size={18} /></button>
-        <button title="2コマ結合" onClick={props.onTwoPanel}><PanelsTopLeft size={18} /></button>
+        <button title="2・3コマ結合" onClick={props.onTwoPanel}><PanelsTopLeft size={18} /></button>
         <button title="モザイク・ぼかし" onClick={props.onMosaic}><Grid3X3 size={18} /></button>
       </div>
       <div className="toolbar-group zoom-group desktop-zoom-actions">

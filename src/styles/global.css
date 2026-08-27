@@ -720,7 +720,6 @@ textarea {
   position: relative;
   flex: 0 0 auto;
   overflow: hidden;
-  aspect-ratio: 9 / 16;
   background: #050505;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.42);
 }
@@ -732,22 +731,29 @@ textarea {
   touch-action: none;
 }
 
-.two-panel-seam {
+.two-panel-overlay {
   position: absolute;
-  left: 0;
-  right: 0;
+  inset: 0;
   z-index: 3;
-  border-top: 1px dashed #78a4ff;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
   pointer-events: none;
 }
 
+.two-panel-seam {
+  fill: none;
+  stroke: #78a4ff;
+  stroke-width: 4;
+  stroke-dasharray: 12 9;
+  vector-effect: non-scaling-stroke;
+}
+
 .two-panel-selection {
-  position: absolute;
-  left: 0;
-  right: 0;
-  z-index: 2;
-  border: 2px solid #4f9cff;
-  pointer-events: none;
+  fill: transparent;
+  stroke: #4f9cff;
+  stroke-width: 5;
+  vector-effect: non-scaling-stroke;
 }
 
 .two-panel-empty-slot {
@@ -755,38 +761,70 @@ textarea {
   left: 8%;
   right: 8%;
   z-index: 4;
-  min-height: 52px;
+  min-height: 46px;
+  transform: translateY(-50%);
   border-style: dashed;
-  background: rgba(19, 23, 32, 0.88);
+  background: rgba(19, 23, 32, 0.9);
 }
-
-.two-panel-empty-slot.top { top: 22%; }
-.two-panel-empty-slot.bottom { bottom: 18%; }
 
 .two-panel-controls {
   display: grid;
-  grid-template-columns: auto auto minmax(180px, 1fr) minmax(180px, 1fr) auto;
-  gap: 10px;
-  align-items: center;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 9px;
+  align-items: end;
+  max-height: min(42vh, 360px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 11px max(16px, calc((100vw - 1180px) / 2));
   padding-bottom: max(11px, env(safe-area-inset-bottom));
   border-top: 1px solid #2a303b;
   background: #131720;
 }
 
-.two-panel-tabs {
+.two-panel-count-switch,
+.two-panel-tabs,
+.two-panel-fit-switch {
   display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: 5px;
 }
 
-.two-panel-tabs button.active {
+.two-panel-count-switch {
+  grid-column: span 2;
+  grid-template-columns: 1fr 1fr;
+}
+
+.two-panel-tabs {
+  grid-column: span 3;
+}
+
+.two-panel-fit-switch {
+  grid-column: span 2;
+  grid-template-columns: 1fr 1fr;
+}
+
+.two-panel-count-switch button.active,
+.two-panel-tabs button.active,
+.two-panel-fit-switch button.active {
   border-color: #78a4ff;
   background: #2f6fed;
   color: #ffffff;
 }
 
-.two-panel-controls > label {
+.two-panel-reselect,
+.two-panel-reset {
+  grid-column: span 2;
+}
+
+.two-panel-size-controls {
+  grid-column: span 3;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.two-panel-dimension-field,
+.two-panel-range-field,
+.two-panel-angle-field {
   min-width: 0;
   display: grid;
   gap: 4px;
@@ -794,19 +832,84 @@ textarea {
   font-size: 12px;
 }
 
-.two-panel-controls > label > span {
+.two-panel-dimension-field > span:first-child,
+.two-panel-range-field > span,
+.two-panel-angle-field > span {
   display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: 8px;
 }
 
-.two-panel-controls > label b { color: #edf1f7; }
+.two-panel-dimension-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 5px;
+}
+
+.two-panel-dimension-control > span {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 3px;
+}
+
+.two-panel-dimension-control button {
+  min-width: 34px;
+  min-height: 22px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.two-panel-range-field {
+  grid-column: span 3;
+}
+
+.two-panel-angle-field {
+  grid-column: span 4;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.two-panel-angle-field > span {
+  min-width: 0;
+}
+
+.two-panel-angle-field > input[type="range"] {
+  grid-column: 1 / -1;
+}
+
+.two-panel-remember-angle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  white-space: nowrap;
+  color: #edf1f7;
+  font-size: 12px;
+}
+
+.two-panel-remember-angle input {
+  width: 19px;
+  min-height: 19px;
+  accent-color: #2f6fed;
+}
+
+.two-panel-zoom-field {
+  grid-column: span 3;
+}
+
+.two-panel-dimension-field b,
+.two-panel-range-field b,
+.two-panel-angle-field b {
+  color: #edf1f7;
+}
 
 .two-panel-error {
   grid-column: 1 / -1;
   color: #ffb0ae;
   font-size: 12px;
 }
-
 .toast.success { border-color: #2f9e6b; }
 .toast.warning { border-color: #d99b2b; }
 .toast.error { border-color: #de4c4a; }
@@ -1377,17 +1480,24 @@ textarea {
   .two-panel-controls {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
-    max-height: min(36dvh, 270px);
-    overflow-y: auto;
-    overscroll-behavior: contain;
+    max-height: min(43dvh, 330px);
     padding: 9px;
     padding-bottom: max(9px, env(safe-area-inset-bottom));
   }
 
+  .two-panel-count-switch,
   .two-panel-tabs,
-  .two-panel-controls > label,
+  .two-panel-fit-switch,
+  .two-panel-size-controls,
+  .two-panel-range-field,
+  .two-panel-angle-field,
   .two-panel-error {
     grid-column: 1 / -1;
+  }
+
+  .two-panel-reselect,
+  .two-panel-reset {
+    grid-column: span 1;
   }
 
   .two-panel-controls button {
@@ -1396,6 +1506,9 @@ textarea {
     padding: 4px 7px;
   }
 
+  .two-panel-dimension-control button {
+    min-height: 24px;
+  }
   .mosaic-editor {
     grid-template-rows: 54px minmax(0, 1fr) auto;
     height: 100dvh;
