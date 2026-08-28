@@ -4,6 +4,7 @@ import type { BubbleObject, CanvasSize, EditorObject, ExportOptions, ProjectDocu
 import { clampZoom, fitToViewport, zoomAroundPoint } from "../viewport";
 import { rgbaToHex } from "../../platform/browser/fileHelpers";
 import { createEyedropperPatchShape } from "../eyedropperPatch";
+import { clientPointFromInput } from "../inputPoint";
 
 type FabricObject = any;
 type FabricCanvas = any;
@@ -141,7 +142,12 @@ export class FabricEditorAdapter {
 
   setActiveTool(tool: string): void {
     this.activeTool = tool;
+    const eyedropperActive = tool === "eyedropper";
+    this.canvas.skipTargetFind = eyedropperActive;
+    this.canvas.selection = !eyedropperActive;
+    if (eyedropperActive) this.canvas.discardActiveObject();
     this.canvas.defaultCursor = tool === "pan" ? "grab" : tool === "eyedropper" ? "crosshair" : "default";
+    this.canvas.requestRenderAll();
   }
 
   setViewportSize(size: CanvasSize): void {
@@ -383,14 +389,19 @@ export class FabricEditorAdapter {
     });
 
     this.canvas.on("mouse:down", (event: any) => {
-      const native = event.e as MouseEvent;
+      const native = event.e as MouseEvent | TouchEvent;
       if (this.activeTool === "eyedropper") {
-        void this.pickColor(native);
+        native.preventDefault?.();
+        native.stopPropagation?.();
+        void this.pickColor(native).catch(() => {
+          this.callbacks.onToast("色を取得できませんでした。もう一度画像内をタップしてください。", "error");
+        });
         return;
       }
-      if (this.activeTool === "pan" || native.button === 1 || native.altKey) {
+      const mouse = native as MouseEvent;
+      if (this.activeTool === "pan" || mouse.button === 1 || mouse.altKey) {
         this.isPanning = true;
-        this.lastPanPoint = { x: native.clientX, y: native.clientY };
+        this.lastPanPoint = { x: mouse.clientX, y: mouse.clientY };
         this.canvas.selection = false;
         this.canvas.defaultCursor = "grabbing";
       }
@@ -408,16 +419,33 @@ export class FabricEditorAdapter {
 
     this.canvas.on("mouse:up", () => {
       this.isPanning = false;
-      this.canvas.selection = true;
+      this.canvas.selection = this.activeTool !== "eyedropper";
       this.canvas.defaultCursor = this.activeTool === "pan" ? "grab" : this.activeTool === "eyedropper" ? "crosshair" : "default";
     });
   }
 
-  private async pickColor(native: MouseEvent): Promise<void> {
+  private async pickColor(native: MouseEvent | TouchEvent): Promise<void> {
+    const clientPoint = clientPointFromInput(native);
+    if (!clientPoint) {
+      this.callbacks.onToast("タップ位置を取得できませんでした。もう一度お試しください。", "warning");
+      return;
+    }
     const element = this.canvas.lowerCanvasEl as HTMLCanvasElement;
     const rect = element.getBoundingClientRect();
-    const localX = native.clientX - rect.left;
-    const localY = native.clientY - rect.top;
+    if (rect.width <= 0 || rect.height <= 0) {
+      this.callbacks.onToast("画像の表示を準備中です。少し待ってからお試しください。", "warning");
+      return;
+    }
+    const localX = clientPoint.x - rect.left;
+    const localY = clientPoint.y - rect.top;
+    const scenePoint = {
+      x: (localX - this.view.panX) / this.view.zoom,
+      y: (localY - this.view.panY) / this.view.zoom,
+    };
+    if (scenePoint.x < 0 || scenePoint.y < 0 || scenePoint.x > this.project.canvas.width || scenePoint.y > this.project.canvas.height) {
+      this.callbacks.onToast("画像の内側をタップしてください。", "warning");
+      return;
+    }
     const sampleX = Math.min(element.width - 1, Math.max(0, Math.floor(localX * element.width / Math.max(1, rect.width))));
     const sampleY = Math.min(element.height - 1, Math.max(0, Math.floor(localY * element.height / Math.max(1, rect.height))));
     const context = element.getContext("2d");
@@ -429,10 +457,6 @@ export class FabricEditorAdapter {
     }
 
     const color = rgbaToHex(r, g, b);
-    const scenePoint = this.canvas.getScenePoint?.(native) ?? {
-      x: (localX - this.view.panX) / this.view.zoom,
-      y: (localY - this.view.panY) / this.view.zoom,
-    };
     const patch = createEyedropperPatchShape(
       { x: Number(scenePoint.x), y: Number(scenePoint.y) },
       color,
